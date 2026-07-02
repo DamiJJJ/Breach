@@ -1,0 +1,34 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0d10;
+}
+
+#game-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Warstwy canvas — kolejność wg briefu: map < entities < fog < HUD (HTML) */
+#game-container canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#map      { z-index: 1; }
+#entities { z-index: 2; }
+#fog      { z-index: 3; }
+
+#hud {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none; /* klikanie przechodzi do canvasa; interaktywne dzieci włączają pointer-events same */
+}

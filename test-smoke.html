@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head><meta charset="utf-8"><title>BREACH smoke test</title></head>
+<body>
+<pre id="out">RUNNING</pre>
+<script src="https://cdn.jsdelivr.net/npm/pathfinding@0.4.18/visual/lib/pathfinding-browser.min.js"></script>
+<script type="module">
+import { MapData } from './js/map/MapData.js';
+import { Operator } from './js/entities/Operator.js';
+
+const out = [];
+const ok = (name, cond) => out.push(`${cond ? 'PASS' : 'FAIL'} ${name}`);
+
+try {
+  const map = await MapData.load('maps/mission_01.json');
+
+  // konwersje tile<->world
+  const w = map.tileToWorld(2, 2);
+  ok('tileToWorld center', w.x === 80 && w.y === 80);
+  const t = map.worldToTile(81, 95);
+  ok('worldToTile', t.col === 2 && t.row === 2);
+
+  // maski: okno (10,2) blokuje ruch, NIE blokuje LOS; ściana (10,1) blokuje oba
+  ok('window blocks move', !map.isWalkable(10, 2));
+  ok('window passes LOS', !map.blocksLos(10, 2));
+  ok('wall blocks move', !map.isWalkable(10, 1));
+  ok('wall blocks LOS', map.blocksLos(10, 1));
+  ok('floor walkable', map.isWalkable(1, 1));
+
+  // pathfinding: spawn (2,2) -> hala (15,4) — przez przerwę w ścianie col 10
+  const a = map.tileToWorld(2, 2);
+  const b = map.tileToWorld(15, 4);
+  const path = map.findPathWorld(a.x, a.y, b.x, b.y);
+  ok('path exists', Array.isArray(path) && path.length > 0);
+  ok('path ends at target', path && Math.abs(path[path.length - 1].x - b.x) < 1 && Math.abs(path[path.length - 1].y - b.y) < 1);
+  ok('path tiles walkable', path && path.every(p => { const pt = map.worldToTile(p.x, p.y); return map.isWalkable(pt.col, pt.row); }));
+
+  // do pokoju lewy-dolny (3,16) — musi istnieć (wejście przerwą (4,13))
+  const c = map.tileToWorld(3, 16);
+  const path2 = map.findPathWorld(a.x, a.y, c.x, c.y);
+  ok('path into room exists', Array.isArray(path2) && path2.length > 0);
+
+  // cel na ścianie -> null
+  const wallW = map.tileToWorld(10, 1);
+  ok('path to wall is null', map.findPathWorld(a.x, a.y, wallW.x, wallW.y) === null);
+
+  // operator idzie po ścieżce i dochodzi do celu
+  const op = new Operator(a.x, a.y, 0);
+  op.setPath(path);
+  for (let i = 0; i < 60 * 30 && op.path.length; i++) op.update(1 / 60);
+  ok('operator reaches target', Math.hypot(op.x - b.x, op.y - b.y) < 1);
+  ok('operator direction finite', Number.isFinite(op.direction));
+
+  const fails = out.filter(l => l.startsWith('FAIL')).length;
+  out.push(fails === 0 ? 'ALL-PASS' : `FAILURES: ${fails}`);
+} catch (err) {
+  out.push('EXCEPTION: ' + err.message);
+}
+document.getElementById('out').textContent = out.join('\n');
+</script>
+</body>
+</html>

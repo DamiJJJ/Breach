@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BREACH</title>
+  <link rel="stylesheet" href="css/game.css">
+  <link rel="stylesheet" href="css/ui.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="map"></canvas>
+    <canvas id="entities"></canvas>
+    <canvas id="fog"></canvas>
+
+    <div id="hud">
+      <div id="hud-top">
+        <span id="state-badge" class="badge planning">PLANOWANIE</span>
+        <span id="mission-name"></span>
+      </div>
+      <div id="hud-hint">
+        LPM &ndash; zaznacz operatora (Shift = wielu) &middot; PPM &ndash; rozkaz ruchu &middot; SPACJA &ndash; start / pauza &middot; k&oacute;łko &ndash; zoom
+      </div>
+      <div id="error-overlay" class="hidden"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>
+  <!-- UWAGA: URL z briefu (cdnjs) daje 404 — pathfinding nie jest hostowany na cdnjs; działający bundle jest na jsDelivr -->
+  <script src="https://cdn.jsdelivr.net/npm/pathfinding@0.4.18/visual/lib/pathfinding-browser.min.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

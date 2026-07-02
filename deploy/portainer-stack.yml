@@ -1,0 +1,12 @@
+# Stack dla Portainera (Stacks -> Add stack -> nazwa: breach)
+# Port 8086 = kolejny wolny wg mapy portów homeservera (8084 CRM, 8085 MeTube zarezerwowane).
+# Po deployu: NPM -> Proxy Host: breach.home -> http -> 192.168.1.115:8086 (Block Common Exploits ON)
+services:
+  breach:
+    image: ghcr.io/damijjj/breach:latest
+    container_name: breach
+    restart: unless-stopped
+    ports:
+      - "8086:80"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
