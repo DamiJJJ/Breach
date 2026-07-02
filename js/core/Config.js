@@ -12,6 +12,12 @@ export const CFG = {
   LOS_RANGE: 200,           // px
   LOS_RAYS: 60,
 
+  ENEMY_SPEED: 100,         // px/s
+  ENEMY_RADIUS: 10,         // px (rysowanie)
+  ENEMY_TURN_RATE: Math.PI * 2, // rad/s — obrót wroga w miejscu (ALERT/powrót)
+  ALERT_COOLDOWN_S: 4,      // ile sekund bez kontaktu wróg zostaje w ALERT
+  PATROL_PAUSE_S: 1,        // postój na punkcie patrolu
+
   ALERT_RADIUS_TILES: 5,
   KICK_ALERT_TILES: 5,
   FLASH_STUN_S: 3,

@@ -7,6 +7,9 @@
 <script type="module">
 import { MapData } from './js/map/MapData.js';
 import { Operator } from './js/entities/Operator.js';
+import { Enemy } from './js/entities/Enemy.js';
+import { DetectionSystem } from './js/systems/DetectionSystem.js';
+import { AISystem } from './js/systems/AISystem.js';
 
 const out = [];
 const ok = (name, cond) => out.push(`${cond ? 'PASS' : 'FAIL'} ${name}`);
@@ -50,6 +53,71 @@ try {
   for (let i = 0; i < 60 * 30 && op.path.length; i++) op.update(1 / 60);
   ok('operator reaches target', Math.hypot(op.x - b.x, op.y - b.y) < 1);
   ok('operator direction finite', Number.isFinite(op.direction));
+
+  // --- Sprint 2: raycast / LOS po losMask ---
+  // promień z (1,1) w prawo trafia w ścianę col 10 (krawędź x=320)
+  const rayStart = map.tileToWorld(1, 1);
+  const ray = map.castRay(rayStart.x, rayStart.y, 0, 1000);
+  ok('castRay hits wall', ray.hit && Math.abs(ray.x - 320) < 0.001 && Math.abs(ray.dist - 272) < 0.001);
+  const rayShort = map.castRay(rayStart.x, rayStart.y, 0, 100);
+  ok('castRay respects range', !rayShort.hit && Math.abs(rayShort.dist - 100) < 0.001);
+
+  const at = (c, r) => map.tileToWorld(c, r);
+  ok('LOS open floor', map.hasLineOfSight(at(2,2).x, at(2,2).y, at(8,2).x, at(8,2).y));
+  ok('LOS through window', map.hasLineOfSight(at(20,7).x, at(20,7).y, at(20,9).x, at(20,9).y));
+  ok('LOS blocked by wall', !map.hasLineOfSight(at(12,7).x, at(12,7).y, at(12,9).x, at(12,9).y));
+
+  // --- Sprint 2: DetectionSystem ---
+  const det = new DetectionSystem({ map });
+  const mkEnemy = (c, r, facingRad = 0) =>
+    new Enemy({ id: 't', ...at(c, r), type: 'stationary', facingRad });
+  const mkOp = (c, r) => new Operator(at(c, r).x, at(c, r).y, 99);
+
+  ok('detect: sees ahead', det.canSee(mkEnemy(15, 4, 0), mkOp(18, 4)));
+  ok('detect: not behind (FOV)', !det.canSee(mkEnemy(15, 4, 0), mkOp(12, 4)));
+  ok('detect: not beyond range', !det.canSee(mkEnemy(15, 4, 0), mkOp(22, 4)));
+  ok('detect: wall blocks', !det.canSee(mkEnemy(12, 7, Math.PI / 2), mkOp(12, 9)));
+  ok('detect: window passes', det.canSee(mkEnemy(20, 7, Math.PI / 2), mkOp(20, 9)));
+
+  // wykrycie ustawia ALERT i propaguje do wroga obok (2 kafelki < ALERT_RADIUS_TILES)
+  const spotter = mkEnemy(15, 4, 0);
+  const buddy = mkEnemy(17, 4, Math.PI); // patrzy w drugą stronę — sam nie widzi
+  det.update([spotter, buddy], [mkOp(18, 4)]);
+  ok('detect: spotter alerted', spotter.state === 'ALERT' && spotter.lastKnown !== null);
+  ok('detect: alert propagates', buddy.state === 'ALERT');
+
+  // --- Sprint 2: AISystem ---
+  const ai = new AISystem({ map });
+  const patroller = new Enemy({
+    id: 'p1', ...at(15, 4), type: 'patrol',
+    patrol: [at(15, 4), at(21, 4), at(21, 7)],
+  });
+  let minDistToWp = Infinity;
+  for (let i = 0; i < 60 * 15; i++) {
+    ai.update([patroller], 1 / 60);
+    patroller.update(1 / 60);
+    minDistToWp = Math.min(minDistToWp, Math.hypot(patroller.x - at(21, 4).x, patroller.y - at(21, 4).y));
+  }
+  ok('AI: patrol reaches waypoint', minDistToWp < 1);
+  ok('AI: patrol keeps state', patroller.state === 'PATROL');
+
+  // wartownik: alarm -> idzie do lastKnown -> po cooldownie wraca do home
+  const guard = mkEnemy(15, 4, 0);
+  det.update([guard], [mkOp(18, 4)]);
+  ok('AI: guard alerted', guard.state === 'ALERT');
+  for (let i = 0; i < 60 * 3; i++) { // 3 s — dojście do lastKnown w trakcie alarmu
+    ai.update([guard], 1 / 60);
+    guard.update(1 / 60);
+  }
+  const nearLk = Math.hypot(guard.x - at(18, 4).x, guard.y - at(18, 4).y) < map.tileSize;
+  ok('AI: guard investigates', nearLk);
+  for (let i = 0; i < 60 * 7; i++) { // dokończenie cooldownu + powrót
+    ai.update([guard], 1 / 60);
+    guard.update(1 / 60);
+  }
+  ok('AI: guard returns home', guard.state === 'IDLE'
+    && Math.hypot(guard.x - guard.home.x, guard.y - guard.home.y) < 2
+    && Math.abs(guard.direction - guard.home.direction) < 0.01);
 
   const fails = out.filter(l => l.startsWith('FAIL')).length;
   out.push(fails === 0 ? 'ALL-PASS' : `FAILURES: ${fails}`);

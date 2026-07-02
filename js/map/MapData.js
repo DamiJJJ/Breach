@@ -88,6 +88,60 @@ export class MapData {
   }
 
   /**
+   * Rzut promienia po losMask (traversal siatki Amanatides–Woo, dokładny —
+   * bez próbkowania co N px). Kafelek startowy nie blokuje (encja w nim stoi).
+   * @param {number} x0 world px
+   * @param {number} y0 world px
+   * @param {number} angle radiany (0 = w prawo, Y w dół)
+   * @param {number} maxDist px
+   * @returns {{x:number,y:number,dist:number,hit:boolean}} punkt końcowy —
+   *   przecięcie z blokującym kafelkiem albo koniec zasięgu
+   */
+  castRay(x0, y0, angle, maxDist) {
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    const ts = this.tileSize;
+    let { col, row } = this.worldToTile(x0, y0);
+
+    const stepCol = dx > 0 ? 1 : -1;
+    const stepRow = dy > 0 ? 1 : -1;
+    const tDeltaX = dx !== 0 ? Math.abs(ts / dx) : Infinity;
+    const tDeltaY = dy !== 0 ? Math.abs(ts / dy) : Infinity;
+    // odległość do pierwszej krawędzi siatki na każdej osi
+    let tMaxX = dx !== 0 ? ((col + (dx > 0 ? 1 : 0)) * ts - x0) / dx : Infinity;
+    let tMaxY = dy !== 0 ? ((row + (dy > 0 ? 1 : 0)) * ts - y0) / dy : Infinity;
+
+    for (;;) {
+      let t;
+      if (tMaxX < tMaxY) {
+        t = tMaxX;
+        tMaxX += tDeltaX;
+        col += stepCol;
+      } else {
+        t = tMaxY;
+        tMaxY += tDeltaY;
+        row += stepRow;
+      }
+      if (t >= maxDist) {
+        return { x: x0 + dx * maxDist, y: y0 + dy * maxDist, dist: maxDist, hit: false };
+      }
+      if (this.blocksLos(col, row)) {
+        return { x: x0 + dx * t, y: y0 + dy * t, dist: t, hit: true };
+      }
+    }
+  }
+
+  /**
+   * Czy między dwoma punktami world px jest linia widzenia (po losMask —
+   * okno przepuszcza, ściana/zamknięte drzwi blokują).
+   */
+  hasLineOfSight(x0, y0, x1, y1) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    if (dist < 1e-6) return true;
+    return !this.castRay(x0, y0, Math.atan2(y1 - y0, x1 - x0), dist).hit;
+  }
+
+  /**
    * Przebudowa obu masek + gridu PF. Wołać po KAŻDEJ zmianie stanu drzwi
    * (kontrakt briefu — drzwi, punkt a i b).
    */

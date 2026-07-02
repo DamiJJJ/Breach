@@ -29,8 +29,9 @@ python -m http.server 8000
 ```
 js/core       Config, Game (state machine), GameLoop (fixed timestep), InputHandler
 js/rendering  Camera (screenToWorld = odwrotność transformu renderu), MapRenderer (offscreen), EntityRenderer
-js/entities   Entity, Operator (encje nie importują systemów)
-js/map        MapData — walidacja, maski (collision ≠ LOS), konwersje tile↔px, pathfinding
+js/entities   Entity, Operator, Enemy (encje nie importują systemów)
+js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzenia + LOS)
+js/map        MapData — walidacja, maski (collision ≠ LOS), konwersje tile↔px, pathfinding, raycast
 js/ui         HUD (HTML overlay)
 maps/         mapy w naszym formacie JSON (nie Tiled)
 ```
@@ -47,7 +48,7 @@ Biblioteki z CDN: [PathFinding.js](https://github.com/qiao/PathFinding.js) (A*),
 ## Status sprintów
 
 - [x] **Sprint 1** — mapa + kamera + operator z pathfindingiem
-- [ ] Sprint 2 — DetectionSystem + wrogowie + AI
+- [x] **Sprint 2** — DetectionSystem + wrogowie + AI
 - [ ] Sprint 3 — LOS + Fog of War
 - [ ] Sprint 4 — drzwi + synchronizacja masek
 - [ ] Sprint 5 — walka (hitscan)

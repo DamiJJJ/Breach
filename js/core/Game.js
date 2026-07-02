@@ -2,9 +2,13 @@ import { Camera } from '../rendering/Camera.js';
 import { MapRenderer } from '../rendering/MapRenderer.js';
 import { EntityRenderer } from '../rendering/EntityRenderer.js';
 import { Operator } from '../entities/Operator.js';
+import { Enemy } from '../entities/Enemy.js';
+import { AISystem } from '../systems/AISystem.js';
+import { DetectionSystem } from '../systems/DetectionSystem.js';
 import { GameLoop } from './GameLoop.js';
 import { InputHandler } from './InputHandler.js';
 import { HUD } from '../ui/HUD.js';
+import { degToRad } from './MathUtils.js';
 
 /**
  * Główna klasa gry: maszyna stanów PLANNING/EXECUTING/RESULT, skleja systemy
@@ -28,7 +32,7 @@ export class Game {
     // input i screenToWorld liczone względem najwyższej warstwy canvas
     this.camera = new Camera(canvases.fog);
     this.mapRenderer = new MapRenderer(map, canvases.map);
-    this.entityRenderer = new EntityRenderer(canvases.entities);
+    this.entityRenderer = new EntityRenderer(map, canvases.entities);
     this.hud = new HUD();
 
     this.operators = map.playerSpawns.map((s, i) => {
@@ -36,6 +40,21 @@ export class Game {
       return new Operator(pos.x, pos.y, i);
     });
     this.operators[0].selected = true;
+
+    this.enemies = map.enemies.map((spec, i) => {
+      const pos = map.tileToWorld(spec.x, spec.y);
+      return new Enemy({
+        id: spec.id ?? `enemy_${i}`,
+        x: pos.x,
+        y: pos.y,
+        type: spec.type,
+        facingRad: degToRad(spec.facing ?? 0),
+        patrol: (spec.patrol ?? []).map(([col, row]) => map.tileToWorld(col, row)),
+      });
+    });
+
+    this.aiSystem = new AISystem({ map });
+    this.detectionSystem = new DetectionSystem({ map });
 
     this.input = new InputHandler({ canvas: canvases.fog, camera: this.camera, game: this });
 
@@ -77,8 +96,13 @@ export class Game {
 
   /** Krok symulacji — tylko w EXECUTING (pilnuje GameLoop). */
   update(dt) {
+    // 2. AI — decyzje wrogów (stany, cele ścieżek)
+    this.aiSystem.update(this.enemies, dt);
     // 3. Movement
     for (const op of this.operators) op.update(dt);
+    for (const enemy of this.enemies) enemy.update(dt);
+    // 4. Detection — percepcja po ruchu, na pozycjach z tej klatki
+    this.detectionSystem.update(this.enemies, this.operators);
     // 8. Camera.update — follow środka zaznaczonych operatorów
     const targets = this.selectedOperators;
     this.camera.follow(targets.length ? targets : this.operators, dt);
@@ -87,7 +111,7 @@ export class Game {
   /** Render — zawsze, także w PLANNING. */
   render() {
     this.mapRenderer.draw(this.camera, this.dpr);
-    this.entityRenderer.draw(this.camera, this.dpr, this.operators);
+    this.entityRenderer.draw(this.camera, this.dpr, this.operators, this.enemies);
   }
 
   /** DPR/Retina + resize wg kontraktu briefu. */
