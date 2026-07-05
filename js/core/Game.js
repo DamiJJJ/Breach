@@ -5,6 +5,8 @@ import { Operator } from '../entities/Operator.js';
 import { Enemy } from '../entities/Enemy.js';
 import { AISystem } from '../systems/AISystem.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
+import { VisionSystem } from '../systems/VisionSystem.js';
+import { FogRenderer } from '../rendering/FogRenderer.js';
 import { GameLoop } from './GameLoop.js';
 import { InputHandler } from './InputHandler.js';
 import { HUD } from '../ui/HUD.js';
@@ -55,6 +57,8 @@ export class Game {
 
     this.aiSystem = new AISystem({ map });
     this.detectionSystem = new DetectionSystem({ map });
+    this.visionSystem = new VisionSystem({ map, detection: this.detectionSystem });
+    this.fogRenderer = new FogRenderer(map, canvases.fog);
 
     this.input = new InputHandler({ canvas: canvases.fog, camera: this.camera, game: this });
 
@@ -110,8 +114,11 @@ export class Game {
 
   /** Render — zawsze, także w PLANNING. */
   render() {
+    // widzenie liczone w fazie renderu, nie update — mgła musi żyć też w PLANNING
+    const vision = this.visionSystem.compute(this.operators, this.enemies);
     this.mapRenderer.draw(this.camera, this.dpr);
-    this.entityRenderer.draw(this.camera, this.dpr, this.operators, this.enemies);
+    this.entityRenderer.draw(this.camera, this.dpr, this.operators, this.enemies, vision.visibleEnemies);
+    this.fogRenderer.draw(this.camera, this.dpr, vision.polygons, this.selectedOperators);
   }
 
   /** DPR/Retina + resize wg kontraktu briefu. */

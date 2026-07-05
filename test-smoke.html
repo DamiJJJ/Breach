@@ -10,6 +10,8 @@ import { Operator } from './js/entities/Operator.js';
 import { Enemy } from './js/entities/Enemy.js';
 import { DetectionSystem } from './js/systems/DetectionSystem.js';
 import { AISystem } from './js/systems/AISystem.js';
+import { VisionSystem } from './js/systems/VisionSystem.js';
+import { CFG } from './js/core/Config.js';
 
 const out = [];
 const ok = (name, cond) => out.push(`${cond ? 'PASS' : 'FAIL'} ${name}`);
@@ -118,6 +120,40 @@ try {
   ok('AI: guard returns home', guard.state === 'IDLE'
     && Math.hypot(guard.x - guard.home.x, guard.y - guard.home.y) < 2
     && Math.abs(guard.direction - guard.home.direction) < 0.01);
+
+  // --- Sprint 3: VisionSystem (LOS + Fog of War) ---
+  const vision = new VisionSystem({ map, detection: det });
+  const seerAt = (c, r, dir = 0) => { const o = mkOp(c, r); o.direction = dir; return o; };
+
+  // operator w (15,4) patrzy w prawo: przed nim widzi, za sobą tylko "kątem oka"
+  const seer = seerAt(15, 4);
+  const eAhead = mkEnemy(18, 4);       // 96 px przed — w stożku
+  const eBehindFar = mkEnemy(12, 4);   // 96 px za — poza stożkiem i poza kręgiem
+  const eBehindClose = mkEnemy(14, 4); // 32 px za — w kręgu bliskim (1.5 kafelka)
+  const eTooFar = mkEnemy(22, 4);      // 224 px przed — poza LOS_RANGE
+  const vis1 = vision.compute([seer], [eAhead, eBehindFar, eBehindClose, eTooFar]);
+  ok('vision: sees ahead', vis1.visibleEnemies.has(eAhead));
+  ok('vision: not behind beyond proximity', !vis1.visibleEnemies.has(eBehindFar));
+  ok('vision: proximity sees behind', vis1.visibleEnemies.has(eBehindClose));
+  ok('vision: not beyond range', !vis1.visibleEnemies.has(eTooFar));
+
+  const visWall = vision.compute([seerAt(12, 7, Math.PI / 2)], [mkEnemy(12, 9)]);
+  ok('vision: wall hides enemy', visWall.visibleEnemies.size === 0);
+  const visWin = vision.compute([seerAt(20, 7, Math.PI / 2)], [mkEnemy(20, 9)]);
+  ok('vision: window reveals enemy', visWin.visibleEnemies.size === 1);
+
+  // wielokąty: stożek + krąg na operatora, wszystkie punkty w zasięgu wzroku
+  ok('vision: 2 polygons per operator', vis1.polygons.length === 2);
+  ok('vision: polygons within range', vis1.polygons.every(poly =>
+    poly.every(p => Math.hypot(p.x - seer.x, p.y - seer.y) <= CFG.LOS_RANGE + 1e-6)));
+  // stożek ucięty na ścianie: operator w (12,7) patrzy w dół, ściana w (12,8) —
+  // środkowy promień (dokładnie w dół) kończy się na górnej krawędzi ściany (y=256)
+  const seerWall = seerAt(12, 7, Math.PI / 2);
+  const conePoly = vision.compute([seerWall], []).polygons[0];
+  ok('vision: cone has apex + arc', conePoly.length === CFG.LOS_RAYS + 2);
+  const midRay = conePoly[1 + CFG.LOS_RAYS / 2]; // [0] = wierzchołek w operatorze
+  ok('vision: cone clipped by wall', Math.abs(midRay.y - 8 * map.tileSize) < 0.001
+    && Math.abs(midRay.x - seerWall.x) < 0.001);
 
   const fails = out.filter(l => l.startsWith('FAIL')).length;
   out.push(fails === 0 ? 'ALL-PASS' : `FAILURES: ${fails}`);

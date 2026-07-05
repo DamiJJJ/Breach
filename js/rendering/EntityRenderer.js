@@ -4,8 +4,10 @@ import { degToRad } from '../core/MathUtils.js';
 /**
  * Rysuje encje świata na warstwie #entities: stożki widzenia wrogów
  * (raycast po losMask — ucinane na ścianach, przechodzą przez okna),
- * wrogów, operatorów (kółko + trójkąt kierunku), zaznaczenie i ścieżki
- * rozkazów. Czyszczona i rysowana co klatkę.
+ * wrogów i operatorów (kółko + trójkąt kierunku). Czyszczona i rysowana
+ * co klatkę. Wrogowie niewidoczni dla drużyny (VisionSystem) są pomijani
+ * w całości — mgła na #fog przyciemnia tylko teren, ukrywanie wrogów
+ * dzieje się tutaj. Ścieżki rozkazów rysuje FogRenderer (nad mgłą).
  */
 export class EntityRenderer {
   /**
@@ -23,21 +25,21 @@ export class EntityRenderer {
    * @param {number} dpr
    * @param {import('../entities/Operator.js').Operator[]} operators
    * @param {import('../entities/Enemy.js').Enemy[]} enemies
+   * @param {Set<import('../entities/Enemy.js').Enemy>|null} visibleEnemies
+   *   wrogowie widoczni dla drużyny (VisionSystem); null = rysuj wszystkich
    */
-  draw(camera, dpr, operators, enemies = []) {
+  draw(camera, dpr, operators, enemies = [], visibleEnemies = null) {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     camera.applyTransform(ctx, dpr);
 
+    const enemyVisible = (e) => !visibleEnemies || visibleEnemies.has(e);
     for (const enemy of enemies) {
-      if (enemy.alive) this._drawVisionCone(ctx, enemy);
-    }
-    for (const op of operators) {
-      if (op.selected) this._drawPath(ctx, op);
+      if (enemy.alive && enemyVisible(enemy)) this._drawVisionCone(ctx, enemy);
     }
     for (const enemy of enemies) {
-      this._drawEnemy(ctx, enemy);
+      if (enemyVisible(enemy)) this._drawEnemy(ctx, enemy);
     }
     for (const op of operators) {
       this._drawOperator(ctx, op);
@@ -84,26 +86,6 @@ export class EntityRenderer {
       ctx.textBaseline = 'bottom';
       ctx.fillText('!', enemy.x, enemy.y - r - 4);
     }
-  }
-
-  _drawPath(ctx, op) {
-    if (!op.path.length) return;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(124, 252, 155, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo(op.x, op.y);
-    for (const wp of op.path) ctx.lineTo(wp.x, wp.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const end = op.path[op.path.length - 1];
-    ctx.strokeStyle = 'rgba(124, 252, 155, 0.9)';
-    ctx.beginPath();
-    ctx.arc(end.x, end.y, 6, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
   }
 
   _drawOperator(ctx, op) {

@@ -12,6 +12,10 @@ export const CFG = {
   LOS_RANGE: 200,           // px
   LOS_RAYS: 60,
 
+  PROXIMITY_VISION_TILES: 1.5, // widzenie 360° "kątem oka" wokół operatora (mgła + widoczność wrogów)
+  FOG_COLOR: '#05070c',        // nieodkryty teren — pełne krycie
+  FOG_EXPLORED_ALPHA: 0.55,    // przyciemnienie terenu odkrytego, ale poza aktualnym wzrokiem
+
   ENEMY_SPEED: 100,         // px/s
   ENEMY_RADIUS: 10,         // px (rysowanie)
   ENEMY_TURN_RATE: Math.PI * 2, // rad/s — obrót wroga w miejscu (ALERT/powrót)
