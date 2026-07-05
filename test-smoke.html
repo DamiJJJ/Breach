@@ -11,6 +11,7 @@ import { Enemy } from './js/entities/Enemy.js';
 import { DetectionSystem } from './js/systems/DetectionSystem.js';
 import { AISystem } from './js/systems/AISystem.js';
 import { VisionSystem } from './js/systems/VisionSystem.js';
+import { DoorSystem } from './js/systems/DoorSystem.js';
 import { CFG } from './js/core/Config.js';
 
 const out = [];
@@ -40,10 +41,10 @@ try {
   ok('path ends at target', path && Math.abs(path[path.length - 1].x - b.x) < 1 && Math.abs(path[path.length - 1].y - b.y) < 1);
   ok('path tiles walkable', path && path.every(p => { const pt = map.worldToTile(p.x, p.y); return map.isWalkable(pt.col, pt.row); }));
 
-  // do pokoju lewy-dolny (3,16) — musi istnieć (wejście przerwą (4,13))
+  // do pokoju lewy-dolny (3,16) — jedyne wejście (4,13) zamykają drzwi d2,
+  // więc ścieżka istnieje dopiero po ich otwarciu (test w sekcji Sprint 4)
   const c = map.tileToWorld(3, 16);
-  const path2 = map.findPathWorld(a.x, a.y, c.x, c.y);
-  ok('path into room exists', Array.isArray(path2) && path2.length > 0);
+  ok('closed door blocks path into room', map.findPathWorld(a.x, a.y, c.x, c.y) === null);
 
   // cel na ścianie -> null
   const wallW = map.tileToWorld(10, 1);
@@ -142,18 +143,75 @@ try {
   const visWin = vision.compute([seerAt(20, 7, Math.PI / 2)], [mkEnemy(20, 9)]);
   ok('vision: window reveals enemy', visWin.visibleEnemies.size === 1);
 
-  // wielokąty: stożek + krąg na operatora, wszystkie punkty w zasięgu wzroku
+  // wielokąty: stożek + krąg na operatora; promienie ucięte na blokadzie są
+  // przedłużane o FOG_REVEAL_PX (odsłonięcie obserwowanej ściany/drzwi z mgły)
   ok('vision: 2 polygons per operator', vis1.polygons.length === 2);
   ok('vision: polygons within range', vis1.polygons.every(poly =>
-    poly.every(p => Math.hypot(p.x - seer.x, p.y - seer.y) <= CFG.LOS_RANGE + 1e-6)));
+    poly.every(p => Math.hypot(p.x - seer.x, p.y - seer.y) <= CFG.LOS_RANGE + CFG.FOG_REVEAL_PX + 1e-6)));
   // stożek ucięty na ścianie: operator w (12,7) patrzy w dół, ściana w (12,8) —
-  // środkowy promień (dokładnie w dół) kończy się na górnej krawędzi ściany (y=256)
+  // środkowy promień (dokładnie w dół) trafia w górną krawędź ściany (y=256)
+  // i wchodzi FOG_REVEAL_PX w głąb kafelka ściany
   const seerWall = seerAt(12, 7, Math.PI / 2);
   const conePoly = vision.compute([seerWall], []).polygons[0];
   ok('vision: cone has apex + arc', conePoly.length === CFG.LOS_RAYS + 2);
   const midRay = conePoly[1 + CFG.LOS_RAYS / 2]; // [0] = wierzchołek w operatorze
-  ok('vision: cone clipped by wall', Math.abs(midRay.y - 8 * map.tileSize) < 0.001
+  ok('vision: cone clipped by wall + reveal', Math.abs(midRay.y - (8 * map.tileSize + CFG.FOG_REVEAL_PX)) < 0.001
     && Math.abs(midRay.x - seerWall.x) < 0.001);
+
+  // --- Sprint 4: drzwi + synchronizacja masek/gridu ---
+  const d2 = map.doorAt(4, 13);
+  ok('door starts closed', d2 !== null && d2.state === 'closed');
+  ok('closed door blocks move', !map.isWalkable(4, 13));
+  ok('closed door blocks LOS', map.blocksLos(4, 13));
+
+  let dirtyCount = 0;
+  const doors = new DoorSystem({ map, detection: det, onDoorChanged: () => dirtyCount++ });
+
+  // OPEN_SLOW z dojściem: operator daleko od drzwi dostaje ścieżkę podejścia,
+  // po dojściu otwiera cicho; obie maski + grid PF muszą się zsynchronizować
+  const opener = new Operator(at(2, 10).x, at(2, 10).y, 1);
+  ok('door order accepted', doors.orderDoorAction(opener, d2, 'OPEN_SLOW') === true);
+  ok('door order sets approach path', opener.path.length > 0);
+  for (let i = 0; i < 60 * 20 && d2.state === 'closed'; i++) {
+    opener.update(1 / 60);
+    doors.update([opener], [], 1 / 60);
+  }
+  ok('OPEN_SLOW opens door', d2.state === 'open');
+  ok('open door passes move', map.isWalkable(4, 13));
+  ok('open door passes LOS', !map.blocksLos(4, 13));
+  ok('door change marks map dirty once', dirtyCount === 1);
+  ok('door action cleared', opener.doorAction === null);
+  const pathIn = map.findPathWorld(a.x, a.y, c.x, c.y);
+  ok('path through open door', Array.isArray(pathIn) && pathIn.length > 0
+    && pathIn.every(p => { const pt = map.worldToTile(p.x, p.y); return map.isWalkable(pt.col, pt.row); }));
+
+  // KICK: natychmiast + hałas alarmuje wrogów w promieniu KICK_ALERT_TILES
+  // (przez ściany), poza promieniem cisza
+  const d1 = map.doorAt(16, 8);
+  const kicker = new Operator(at(16, 7).x, at(16, 7).y, 2);
+  const nearEnemy = mkEnemy(18, 10, 0); // ~2.8 kafelka od drzwi, za ścianą
+  const farEnemy = mkEnemy(2, 16, 0);   // daleko poza promieniem
+  ok('kick order accepted', doors.orderDoorAction(kicker, d1, 'KICK') === true);
+  ok('kick in place needs no path', kicker.path.length === 0);
+  doors.update([kicker], [nearEnemy, farEnemy], 1 / 60);
+  ok('KICK opens immediately', d1.state === 'open');
+  ok('KICK alerts nearby enemy', nearEnemy.state === 'ALERT' && nearEnemy.lastKnown !== null);
+  ok('KICK does not alert far enemy', farEnemy.state !== 'ALERT');
+  ok('kicked door passes move', map.isWalkable(16, 8));
+
+  // OPEN_SLOW nie jest natychmiastowe — trwa DOOR_OPEN_SLOW_S (świeża mapa)
+  const map2 = await MapData.load('maps/mission_01.json');
+  const doors2 = new DoorSystem({ map: map2, detection: new DetectionSystem({ map: map2 }) });
+  const dd = map2.doorAt(4, 13);
+  const adj = new Operator(map2.tileToWorld(4, 12).x, map2.tileToWorld(4, 12).y, 3);
+  doors2.orderDoorAction(adj, dd, 'OPEN_SLOW');
+  doors2.update([adj], [], 1 / 60);
+  ok('OPEN_SLOW not instant', dd.state === 'closed');
+  for (let i = 0; i < Math.ceil(CFG.DOOR_OPEN_SLOW_S * 60) + 2; i++) doors2.update([adj], [], 1 / 60);
+  ok('OPEN_SLOW opens after delay', dd.state === 'open');
+
+  // rozkaz na już otwartych drzwiach jest odrzucany
+  ok('order on open door rejected', doors2.orderDoorAction(adj, dd, 'KICK') === false);
 
   const fails = out.filter(l => l.startsWith('FAIL')).length;
   out.push(fails === 0 ? 'ALL-PASS' : `FAILURES: ${fails}`);

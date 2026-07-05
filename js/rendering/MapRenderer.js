@@ -71,17 +71,50 @@ export class MapRenderer {
       }
     }
 
-    // drzwi (Sprint 4 doda interakcje — tu tylko wizualizacja stanu)
-    for (const door of map.doors) {
-      const x = door.x * ts;
-      const y = door.y * ts;
-      if (door.state === 'breached') continue; // trwale usunięte
-      ctx.fillStyle = door.state === 'closed' ? '#7a5230' : '#4a3a24';
-      if (door.orientation === 'horizontal') {
-        ctx.fillRect(x, y + ts / 2 - 4, ts, 8);
-      } else {
-        ctx.fillRect(x + ts / 2 - 4, y, 8, ts);
-      }
+    for (const door of map.doors) this._renderDoor(ctx, door, ts);
+  }
+
+  /**
+   * closed: skrzydło w poprzek przejścia; open: skrzydło odchylone do
+   * sąsiedniego kafelka (wizualnie — brief); breached: osmalone szczątki.
+   * Framuga rysowana zawsze, żeby przejście po drzwiach było czytelne.
+   */
+  _renderDoor(ctx, door, ts) {
+    const x = door.x * ts;
+    const y = door.y * ts;
+    const horizontal = door.orientation === 'horizontal';
+
+    // framuga — dwa słupki na końcach przejścia
+    ctx.fillStyle = '#2b3140';
+    if (horizontal) {
+      ctx.fillRect(x, y + ts / 2 - 6, 3, 12);
+      ctx.fillRect(x + ts - 3, y + ts / 2 - 6, 3, 12);
+    } else {
+      ctx.fillRect(x + ts / 2 - 6, y, 12, 3);
+      ctx.fillRect(x + ts / 2 - 6, y + ts - 3, 12, 3);
+    }
+
+    if (door.state === 'breached') {
+      // trwale zniszczone — osmalenie + drzazgi zamiast skrzydła
+      ctx.fillStyle = 'rgba(20, 14, 8, 0.6)';
+      ctx.fillRect(x + 3, y + 3, ts - 6, ts - 6);
+      ctx.fillStyle = '#4a3a24';
+      ctx.fillRect(x + 5, y + ts / 2 - 2, 6, 4);
+      ctx.fillRect(x + ts - 12, y + ts / 2 - 3, 7, 5);
+      ctx.fillRect(x + ts / 2 - 2, y + ts / 2 + 4, 5, 4);
+      return;
+    }
+
+    ctx.fillStyle = door.state === 'closed' ? '#7a5230' : '#5c3f26';
+    if (door.state === 'closed') {
+      if (horizontal) ctx.fillRect(x + 2, y + ts / 2 - 4, ts - 4, 8);
+      else ctx.fillRect(x + ts / 2 - 4, y + 2, 8, ts - 4);
+    } else if (horizontal) {
+      // otwarte: skrzydło na zawiasie odchylone do kafelka powyżej
+      ctx.fillRect(x + 1, y + ts / 2 - ts + 2, 8, ts - 4);
+    } else {
+      // otwarte: skrzydło odchylone do kafelka po lewej
+      ctx.fillRect(x + ts / 2 - ts + 2, y + 1, ts - 4, 8);
     }
   }
 }

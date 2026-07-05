@@ -48,6 +48,21 @@ export class DetectionSystem {
     return this.map.hasLineOfSight(viewer.x, viewer.y, target.x, target.y);
   }
 
+  /**
+   * Hałas (kopnięcie drzwi, strzał, wybuch): alarmuje wrogów w promieniu
+   * radiusTiles od źródła. Dźwięk przechodzi przez ściany — sam promień,
+   * bez testu LOS (brief: "Dźwięk wyzwala ALERT u wrogów w promieniu R kafelków").
+   */
+  raiseNoise(x, y, radiusTiles, enemies) {
+    const radius = radiusTiles * this.map.tileSize;
+    for (const enemy of enemies) {
+      if (!enemy.alive) continue;
+      if (Math.hypot(enemy.x - x, enemy.y - y) <= radius) {
+        this._alertOne(enemy, x, y);
+      }
+    }
+  }
+
   /** Alarmuje wroga + wszystkich w promieniu ALERT_RADIUS_TILES od niego. */
   _raiseAlert(spotter, x, y, enemies) {
     this._alertOne(spotter, x, y);

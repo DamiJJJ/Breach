@@ -5,6 +5,7 @@ import { CFG } from './Config.js';
  * Camera.screenToWorld() zanim zostanie zinterpretowana (kontrakt briefu).
  *
  * LPM = zaznaczenie (Shift = dodawanie), PPM = rozkaz ruchu,
+ * PPM na zamkniętych drzwiach = ciche otwarcie (Ctrl+PPM = kopniak),
  * kółko = zoom pod kursorem, SPACJA = PLANNING <-> EXECUTING.
  */
 export class InputHandler {
@@ -30,7 +31,7 @@ export class InputHandler {
     if (e.button === 0) {
       this._select(world, e.shiftKey);
     } else if (e.button === 2) {
-      this._orderMove(world);
+      this._orderMove(world, e.ctrlKey);
     }
   }
 
@@ -57,12 +58,31 @@ export class InputHandler {
     }
   }
 
-  _orderMove(world) {
+  _orderMove(world, kick = false) {
     const map = this.game.map;
+    const tile = map.worldToTile(world.x, world.y);
+    const door = map.doorAt(tile.col, tile.row);
+
+    // PPM na zamkniętych drzwiach = akcja na drzwiach (najbliższy zaznaczony
+    // operator); Ctrl = KICK, bez Ctrl = ciche otwarcie
+    if (door && door.state === 'closed') {
+      const selected = this.game.selectedOperators;
+      if (!selected.length) return;
+      const doorPos = map.tileToWorld(door.x, door.y);
+      const nearest = selected.reduce((best, op) =>
+        Math.hypot(op.x - doorPos.x, op.y - doorPos.y)
+          < Math.hypot(best.x - doorPos.x, best.y - doorPos.y) ? op : best);
+      this.game.doorSystem.orderDoorAction(nearest, door, kick ? 'KICK' : 'OPEN_SLOW');
+      return;
+    }
+
     for (const op of this.game.operators) {
       if (!op.selected) continue;
       const path = map.findPathWorld(op.x, op.y, world.x, world.y);
-      if (path) op.setPath(path);
+      if (path) {
+        op.setPath(path);
+        op.doorAction = null; // nowy rozkaz ruchu anuluje akcję na drzwiach
+      }
     }
   }
 

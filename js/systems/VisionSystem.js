@@ -66,7 +66,7 @@ export class VisionSystem {
     for (let i = 0; i <= CFG.LOS_RAYS; i++) {
       const angle = op.direction - fov / 2 + (fov * i) / CFG.LOS_RAYS;
       const end = this.map.castRay(op.x, op.y, angle, CFG.LOS_RANGE);
-      points.push({ x: end.x, y: end.y });
+      points.push(this._revealPoint(end, angle));
     }
     return points;
   }
@@ -78,8 +78,21 @@ export class VisionSystem {
     for (let i = 0; i < CFG.LOS_RAYS; i++) {
       const angle = (Math.PI * 2 * i) / CFG.LOS_RAYS;
       const end = this.map.castRay(op.x, op.y, angle, range);
-      points.push({ x: end.x, y: end.y });
+      points.push(this._revealPoint(end, angle));
     }
     return points;
+  }
+
+  /**
+   * Promień zatrzymany na blokadzie przedłużamy o FOG_REVEAL_PX w głąb
+   * kafelka — obserwowana ściana/drzwi mają być odsłonięte z mgły, nie
+   * przyciemnione. Mniej niż pół kafelka, więc nie odsłania nic ZA blokadą.
+   */
+  _revealPoint(end, angle) {
+    if (!end.hit) return { x: end.x, y: end.y };
+    return {
+      x: end.x + Math.cos(angle) * CFG.FOG_REVEAL_PX,
+      y: end.y + Math.sin(angle) * CFG.FOG_REVEAL_PX,
+    };
   }
 }

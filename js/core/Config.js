@@ -13,8 +13,11 @@ export const CFG = {
   LOS_RAYS: 60,
 
   PROXIMITY_VISION_TILES: 1.5, // widzenie 360° "kątem oka" wokół operatora (mgła + widoczność wrogów)
-  FOG_COLOR: '#05070c',        // nieodkryty teren — pełne krycie
-  FOG_EXPLORED_ALPHA: 0.55,    // przyciemnienie terenu odkrytego, ale poza aktualnym wzrokiem
+  FOG_COLOR: '#05070c',        // kolor przyciemnienia mgły
+  FOG_DIM_ALPHA: 0.55,         // teren poza aktualnym wzrokiem: przyciemniony, nie zakryty
+                               // (operatorzy znają plan obiektu — decyzja projektowa)
+  FOG_REVEAL_PX: 12,           // przedłużenie promieni mgły w głąb blokującego kafelka,
+                               // żeby obserwowana ściana/drzwi były odsłonięte, nie przyciemnione
 
   ENEMY_SPEED: 100,         // px/s
   ENEMY_RADIUS: 10,         // px (rysowanie)
@@ -24,6 +27,8 @@ export const CFG = {
 
   ALERT_RADIUS_TILES: 5,
   KICK_ALERT_TILES: 5,
+  DOOR_OPEN_SLOW_S: 0.8,    // czas cichego otwarcia drzwi
+  DOOR_INTERACT_TILES: 1.5, // maks. odległość operator-środek drzwi dla akcji
   FLASH_STUN_S: 3,
   PAR_DEFAULT: 90,
 

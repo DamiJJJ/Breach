@@ -5,6 +5,7 @@ import { Operator } from '../entities/Operator.js';
 import { Enemy } from '../entities/Enemy.js';
 import { AISystem } from '../systems/AISystem.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
+import { DoorSystem } from '../systems/DoorSystem.js';
 import { VisionSystem } from '../systems/VisionSystem.js';
 import { FogRenderer } from '../rendering/FogRenderer.js';
 import { GameLoop } from './GameLoop.js';
@@ -57,6 +58,12 @@ export class Game {
 
     this.aiSystem = new AISystem({ map });
     this.detectionSystem = new DetectionSystem({ map });
+    // zmiana stanu drzwi: rebuildMasks robi DoorSystem, dirty warstwy #map — tutaj
+    this.doorSystem = new DoorSystem({
+      map,
+      detection: this.detectionSystem,
+      onDoorChanged: () => this.mapRenderer.markDirty(),
+    });
     this.visionSystem = new VisionSystem({ map, detection: this.detectionSystem });
     this.fogRenderer = new FogRenderer(map, canvases.fog);
 
@@ -105,7 +112,10 @@ export class Game {
     // 3. Movement
     for (const op of this.operators) op.update(dt);
     for (const enemy of this.enemies) enemy.update(dt);
-    // 4. Detection — percepcja po ruchu, na pozycjach z tej klatki
+    // 4. CommandSystem (na razie: akcje drzwi) — po ruchu, przed detekcją,
+    //    żeby otwarcie drzwi było widoczne dla percepcji w tej samej klatce
+    this.doorSystem.update(this.operators, this.enemies, dt);
+    // 5. Detection — percepcja po ruchu, na pozycjach z tej klatki
     this.detectionSystem.update(this.enemies, this.operators);
     // 8. Camera.update — follow środka zaznaczonych operatorów
     const targets = this.selectedOperators;

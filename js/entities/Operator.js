@@ -17,5 +17,10 @@ export class Operator extends Entity {
     this.id = id;
     this.speed = CFG.OPERATOR_SPEED;
     this.selected = false;
+    /**
+     * Bieżący rozkaz na drzwiach (tylko dane — wykonuje DoorSystem).
+     * @type {{door: import('./Door.js').Door, type: 'OPEN_SLOW'|'KICK', timer: number}|null}
+     */
+    this.doorAction = null;
   }
 }

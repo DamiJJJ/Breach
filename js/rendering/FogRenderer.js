@@ -1,19 +1,20 @@
 import { CFG } from '../core/Config.js';
 
 /**
- * Warstwa #fog (najwyższy canvas) — mgła wojny o trzech stanach:
- *  - nieodkryte:            pełny FOG_COLOR (mapa i wrogowie niewidoczni),
- *  - odkryte, poza wzrokiem: przyciemnienie FOG_EXPLORED_ALPHA (pamięć terenu),
- *  - w polu widzenia:       czyste.
+ * Warstwa #fog (najwyższy canvas) — mgła wojny o DWÓCH stanach:
+ *  - poza polem widzenia: teren przyciemniony FOG_COLOR × FOG_DIM_ALPHA
+ *    (operatorzy znają plan obiektu, więc cała mapa jest czytelna — ale
+ *    wrogów i obiektów dynamicznych poza wzrokiem nie widać: to filtruje
+ *    EntityRenderer po zbiorze visibleEnemies z VisionSystem),
+ *  - w polu widzenia: czysto (wielokąty wycinane przez destination-out).
  *
- * Pamięć odkrytego terenu akumuluje się w offscreenowym canvasie `explored`
- * (rozmiar mapy w px, trwały między klatkami). Mgła klatki składana jest w
- * `compose`: pełny FOG_COLOR → destination-out explored (rozjaśnienie do
- * FOG_EXPLORED_ALPHA) → destination-out aktualnych wielokątów (czysto).
+ * Brak stanu "nieodkryte" i pamięci eksploracji — decyzja projektowa
+ * (feedback z testów: pełne zakrycie utrudniało planowanie, a fabularnie
+ * oddział ma mapę obiektu).
  *
- * Ścieżki rozkazów zaznaczonych operatorów rysowane są NAD mgłą — planowanie
- * wejścia w nieodkryte pomieszczenia musi pozostać widoczne (dlatego ich
- * rysowanie mieszka tu, nie w EntityRenderer pod mgłą).
+ * Ścieżki rozkazów zaznaczonych operatorów rysowane są NAD mgłą — plan
+ * wejścia w przyciemnione pomieszczenia musi pozostać w pełni czytelny
+ * (dlatego ich rysowanie mieszka tu, nie w EntityRenderer pod mgłą).
  */
 export class FogRenderer {
   /**
@@ -24,14 +25,6 @@ export class FogRenderer {
     this.map = map;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-
-    this.explored = document.createElement('canvas');
-    this.explored.width = map.widthPx;
-    this.explored.height = map.heightPx;
-
-    this.compose = document.createElement('canvas');
-    this.compose.width = map.widthPx;
-    this.compose.height = map.heightPx;
   }
 
   /**
@@ -41,45 +34,24 @@ export class FogRenderer {
    * @param {import('../entities/Operator.js').Operator[]} selectedOperators
    */
   draw(camera, dpr, polygons, selectedOperators = []) {
-    this._accumulateExplored(polygons);
-    this._composeFog(polygons);
-
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     camera.applyTransform(ctx, dpr);
-    ctx.drawImage(this.compose, 0, 0);
+
+    // przyciemnienie całej mapy...
+    ctx.globalAlpha = CFG.FOG_DIM_ALPHA;
+    ctx.fillStyle = CFG.FOG_COLOR;
+    ctx.fillRect(0, 0, this.map.widthPx, this.map.heightPx);
+    ctx.globalAlpha = 1;
+
+    // ...z wyciętym na czysto aktualnym polem widzenia
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#fff';
+    for (const poly of polygons) this._fillPolygon(ctx, poly);
+    ctx.globalCompositeOperation = 'source-over';
 
     for (const op of selectedOperators) this._drawPath(ctx, op);
-  }
-
-  _accumulateExplored(polygons) {
-    const ctx = this.explored.getContext('2d');
-    ctx.fillStyle = '#fff';
-    for (const poly of polygons) this._fillPolygon(ctx, poly);
-  }
-
-  _composeFog(polygons) {
-    const ctx = this.compose.getContext('2d');
-    const { width, height } = this.compose;
-
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = CFG.FOG_COLOR;
-    ctx.fillRect(0, 0, width, height);
-
-    // teren odkryty: destination-out zdejmuje (1 - FOG_EXPLORED_ALPHA) krycia,
-    // zostaje przyciemnienie FOG_EXPLORED_ALPHA
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.globalAlpha = 1 - CFG.FOG_EXPLORED_ALPHA;
-    ctx.drawImage(this.explored, 0, 0);
-
-    // aktualne pole widzenia: całkiem czyste
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#fff';
-    for (const poly of polygons) this._fillPolygon(ctx, poly);
-    ctx.globalCompositeOperation = 'source-over';
   }
 
   _fillPolygon(ctx, points) {

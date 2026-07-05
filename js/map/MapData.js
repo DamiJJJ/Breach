@@ -1,4 +1,5 @@
 import { CFG } from '../core/Config.js';
+import { Door } from '../entities/Door.js';
 
 /**
  * Dane mapy + walidacja + obie maski + konwersje tile<->world + pathfinding.
@@ -33,8 +34,8 @@ export class MapData {
     this.objectives = json.objectives ?? [];
     this.parTime = json.par_time ?? CFG.PAR_DEFAULT;
 
-    /** Drzwi z runtime'owym stanem: closed / open / breached */
-    this.doors = (json.doors ?? []).map((d) => ({ ...d, state: 'closed' }));
+    /** @type {Door[]} drzwi z runtime'owym stanem (zmiany stanu: tylko DoorSystem) */
+    this.doors = (json.doors ?? []).map((d) => new Door(d));
 
     this.widthPx = this.width * this.tileSize;
     this.heightPx = this.height * this.tileSize;
@@ -233,6 +234,12 @@ function validateMapJson(json) {
 
   (json.doors ?? []).forEach((d, i) => {
     if (!inBounds(d.x, d.y)) fail(`doors[${i}] "${d.id}" (${d.x},${d.y}) poza mapą`);
+    if (tileTypeAt(d.x, d.y) !== TILE.FLOOR) {
+      fail(`doors[${i}] "${d.id}" (${d.x},${d.y}) nie stoi na floor — drzwi to blokada dodana na kafelku przejścia`);
+    }
+    if (d.orientation && d.orientation !== 'horizontal' && d.orientation !== 'vertical') {
+      fail(`doors[${i}] "${d.id}" — orientation "${d.orientation}" (dozwolone: horizontal/vertical)`);
+    }
   });
 
   (json.enemies ?? []).forEach((e, i) => {
