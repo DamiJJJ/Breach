@@ -3,7 +3,7 @@
 Przeglądarkowa gra taktyczna top-down inspirowana *Door Kickers*.
 Real-Time with Pause · Canvas 2D · Vanilla JS (ES modules, bez bundlera) · PHP backend (od Sprintu 8).
 
-Pełna specyfikacja w dokumencie projektowym *BREACH – Game Design & Technical Brief v2* (konwencje, kontrakty, roadmapa).
+Pełna specyfikacja: [docs/DESIGN.md](docs/DESIGN.md) — *BREACH – Game Design & Technical Brief v2* (konwencje, kontrakty, roadmapa).
 
 ## Uruchomienie lokalne
 
@@ -21,16 +21,18 @@ python -m http.server 8000
 |---|---|
 | Zaznacz operatora | LPM (Shift = wielu) |
 | Rozkaz ruchu | PPM |
+| Ciche otwarcie drzwi | PPM na zamkniętych drzwiach |
+| Kopniak w drzwi (hałas → alarm) | Ctrl + PPM na zamkniętych drzwiach |
 | Start / pauza taktyczna | SPACJA |
-| Zoom | kółko myszy |
+| Zoom | kółko myszy (pod kursorem) |
 
 ## Struktura
 
 ```
-js/core       Config, Game (state machine), GameLoop (fixed timestep), InputHandler
-js/rendering  Camera (screenToWorld = odwrotność transformu renderu), MapRenderer (offscreen), EntityRenderer
-js/entities   Entity, Operator, Enemy (encje nie importują systemów)
-js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzenia + LOS), VisionSystem (widzenie drużyny → mgła)
+js/core       Config, Game (state machine), GameLoop (fixed timestep), InputHandler, MathUtils
+js/rendering  Camera (screenToWorld = odwrotność transformu renderu), MapRenderer (offscreen), EntityRenderer, FogRenderer (mgła + ścieżki rozkazów)
+js/entities   Entity, Operator, Enemy, Door (encje nie importują systemów)
+js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzenia + LOS), VisionSystem (widzenie drużyny → mgła), DoorSystem (jedyne miejsce zmiany stanu drzwi)
 js/map        MapData — walidacja, maski (collision ≠ LOS), konwersje tile↔px, pathfinding, raycast
 js/ui         HUD (HTML overlay)
 maps/         mapy w naszym formacie JSON (nie Tiled)
@@ -49,8 +51,8 @@ Biblioteki z CDN: [PathFinding.js](https://github.com/qiao/PathFinding.js) (A*),
 
 - [x] **Sprint 1** — mapa + kamera + operator z pathfindingiem
 - [x] **Sprint 2** — DetectionSystem + wrogowie + AI
-- [x] **Sprint 3** — LOS + Fog of War (VisionSystem + FogRenderer, mgła trzystanowa)
-- [ ] Sprint 4 — drzwi + synchronizacja masek
+- [x] **Sprint 3** — LOS + Fog of War (VisionSystem + FogRenderer, mgła dwustanowa)
+- [x] **Sprint 4** — drzwi + synchronizacja masek
 - [ ] Sprint 5 — walka (hitscan)
 - [ ] Sprint 6 — rozkazy na ścieżce
 - [ ] Sprint 7 — gadżety

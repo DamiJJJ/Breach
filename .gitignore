@@ -1,4 +1,4 @@
-.claude/
-Thumbs.db
+node_modules/
 .DS_Store
-*.log
+CLAUDE.local.md
+.claude/settings.local.json
