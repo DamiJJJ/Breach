@@ -5,3 +5,5 @@
 Dockerfile
 deploy
 *.md
+# źródłowe logo 1024² z kanałem alfa — do obrazu idą tylko gotowe ikony
+assets/breach_logo*.png

@@ -1,4 +1,6 @@
-# 🔫 BREACH
+<p align="center">
+  <img src="assets/logo-text.png" alt="BREACH" width="340">
+</p>
 
 Przeglądarkowa gra taktyczna top-down inspirowana *Door Kickers*.
 Real-Time with Pause · Canvas 2D · Vanilla JS (ES modules, bez bundlera) · PHP backend (od Sprintu 8).
@@ -36,6 +38,7 @@ js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzen
 js/map        MapData — walidacja, maski (collision ≠ LOS), konwersje tile↔px, pathfinding, raycast
 js/ui         HUD (HTML overlay)
 maps/         mapy w naszym formacie JSON (nie Tiled)
+assets/       logo i ikony (PNG z kanałem alfa) + źródła 1024² (breach_logo*.png)
 ```
 
 Biblioteki z CDN: [PathFinding.js](https://github.com/qiao/PathFinding.js) (A*), [Howler.js](https://howlerjs.com/) (audio, od Sprintu 10).

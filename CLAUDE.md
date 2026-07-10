@@ -18,10 +18,10 @@ The authoritative spec is **[docs/DESIGN.md](docs/DESIGN.md)** (*BREACH – Game
 
 - **Run locally:** `python -m http.server 8000` in the project root, then open `http://localhost:8000`. ES modules + `fetch()` of maps do **not** work over `file://` — a static HTTP server is mandatory.
 
-- **Tests:** `test-smoke.html` is the whole harness (60 assertions, no test runner, no framework). It renders `ALL-PASS` or `FAILURES: <n>` into `<pre id="out">`. Serve, then run headless Chrome (this machine has **no** `msedge` — only `/Applications/Google Chrome.app`):
+- **Tests:** `test-smoke.html` is the whole harness (60 assertions, no test runner, no framework). It renders `ALL-PASS` or `FAILURES: <n>` into `<pre id="out">`. Serve, then run headless Chrome. This is a **Windows** box; both Chrome and Edge are installed. Run it from the Bash tool (the pipeline below is POSIX `sed`, not PowerShell):
   ```bash
   python -m http.server 8000 &
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  "/c/Program Files/Google/Chrome/Application/chrome.exe" \
     --headless --disable-gpu --dump-dom --virtual-time-budget=10000 \
     http://localhost:8000/test-smoke.html \
     | sed -n '/<pre id="out">/,/<\/pre>/p'
@@ -57,6 +57,21 @@ These are the invariants that prevent the classic bugs in this genre. Violating 
 - **Map format** is our own JSON schema (`maps/*.json`), **not** native Tiled export. `MapData.load` validates on load (dimensions match, spawns/doors/enemies in bounds, spawns on floor, doors on floor tiles) and throws a readable error rather than half-loading.
 
 - **One file = one class or one system.** Every class constructor gets a JSDoc block with typed `@param`s (use `import('../path.js').Type` for cross-module types).
+
+## Branding
+
+The mark is a shield emblem, near-black with an orange core. Everything in `assets/` is derived from two committed masters, `breach_logo.png` (emblem) and `breach_logo_tekst.png` (wordmark) — both 1024², RGBA, background already cut. **Don't hand-edit the derived icons**; regenerate them from the masters. There is no build script and no Python in the repo (the icons were a one-off Pillow job); the game still has no build step. The masters are excluded from the Docker image (`.dockerignore`).
+
+- `logo.png` (512², emblem) · `logo-text.png` (512×616, wordmark) · `apple-touch-icon.png` (180²) · `logo-64.png` (HUD) · `favicon-32.png` · `favicon.ico` (16/32/48).
+- Wired in three places: `<link rel="icon">` in [index.html](index.html); `#hud-logo` in `#hud-top` ([index.html](index.html), styled in [css/ui.css](css/ui.css)); the wordmark at the top of [README.md](README.md).
+- The emblem is nearly black and the map background is `#0b0d10`, so `#hud-logo` carries a light `drop-shadow` — remove it and the logo disappears into the map.
+
+If you ever rebuild the icons, four things are not optional:
+
+- **Clamp the masters' alpha first.** The exporter wrote ~100k interior pixels at alpha 251–254 instead of 255. Snap `alpha >= 250` to 255 and `alpha <= 4` to 0, then trim to the alpha bounding box.
+- **Don't despeckle.** The emblem has ~60 tiny disconnected components — those are the *debris shards* flying off the shield, not cutout residue. A minimum-component-size filter erases the artwork.
+- **`apple-touch-icon.png` must be opaque.** iOS discards alpha and composites on black, and the emblem is near-black. It gets a `#1b1f24` backdrop and ~14% padding; the others stay transparent.
+- **Never quantize the PNGs to a palette.** PNG stores palette alpha per entry, so Pillow dithers transparency across the whole interior. Cut file size with resolution instead.
 
 ## Update order in `Game.update()` — and a known deviation
 
