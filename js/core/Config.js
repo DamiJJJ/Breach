@@ -6,6 +6,7 @@ export const CFG = {
 
   OPERATOR_SPEED: 150,      // px/s
   OPERATOR_RADIUS: 10,      // px (rysowanie + kolizja klik-zaznaczenie)
+  OPERATOR_TURN_RATE: Math.PI * 3, // rad/s — obrót w miejscu (węzeł WATCH)
   SELECT_RADIUS: 16,        // px w world space — tolerancja kliknięcia w operatora
 
   LOS_FOV_DEG: 110,

@@ -5,6 +5,7 @@ import { Operator } from '../entities/Operator.js';
 import { Enemy } from '../entities/Enemy.js';
 import { AISystem } from '../systems/AISystem.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { CommandSystem } from '../systems/CommandSystem.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
 import { DoorSystem } from '../systems/DoorSystem.js';
 import { VisionSystem } from '../systems/VisionSystem.js';
@@ -66,6 +67,7 @@ export class Game {
       detection: this.detectionSystem,
       onDoorChanged: () => this.mapRenderer.markDirty(),
     });
+    this.commandSystem = new CommandSystem({ map, doorSystem: this.doorSystem });
     this.combatSystem = new CombatSystem({ detection: this.detectionSystem });
     this.visionSystem = new VisionSystem({ map, detection: this.detectionSystem });
     this.fogRenderer = new FogRenderer(map, canvases.fog);
@@ -115,8 +117,10 @@ export class Game {
     // 3. Movement
     for (const op of this.operators) op.update(dt);
     for (const enemy of this.enemies) enemy.update(dt);
-    // 4. CommandSystem (na razie: akcje drzwi) — po ruchu, przed detekcją,
-    //    żeby otwarcie drzwi było widoczne dla percepcji w tej samej klatce
+    // 4. Command — wykonanie węzłów rozkazów osiągniętych w tej klatce
+    this.commandSystem.update(this.operators, dt);
+    // 4b. DoorSystem — wykonawca akcji na drzwiach (węzły DOOR delegują tu);
+    //     przed detekcją, żeby otwarcie drzwi było widoczne w tej samej klatce
     this.doorSystem.update(this.operators, this.enemies, dt);
     // 5. Detection — percepcja po ruchu, na pozycjach z tej klatki
     this.detectionSystem.update(this.enemies, this.operators);

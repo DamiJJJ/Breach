@@ -4,9 +4,12 @@ import { CFG } from './Config.js';
  * Klawiatura + mysz. Pozycja myszy ZAWSZE przechodzi przez
  * Camera.screenToWorld() zanim zostanie zinterpretowana (kontrakt briefu).
  *
- * LPM = zaznaczenie (Shift = dodawanie), PPM = rozkaz ruchu,
- * PPM na zamkniętych drzwiach = ciche otwarcie (Ctrl+PPM = kopniak),
- * kółko = zoom pod kursorem, SPACJA = PLANNING <-> EXECUTING.
+ * LPM = zaznaczenie (Shift = dodawanie). Rozkazy idą do kolejki
+ * CommandSystemu (Sprint 6): PPM = ruch (zastępuje kolejkę), Shift+PPM =
+ * dołącz na koniec kolejki, PPM na zamkniętych drzwiach = ciche otwarcie
+ * (Ctrl+PPM = kopniak), Alt+PPM = węzeł obserwacji kierunku, S = przystanek
+ * (STOP, czeka na GO), G = sygnał GO (tylko w EXECUTING), kółko = zoom pod
+ * kursorem, SPACJA = PLANNING <-> EXECUTING.
  */
 export class InputHandler {
   /**
@@ -31,7 +34,7 @@ export class InputHandler {
     if (e.button === 0) {
       this._select(world, e.shiftKey);
     } else if (e.button === 2) {
-      this._orderMove(world, e.ctrlKey);
+      this._order(world, e);
     }
   }
 
@@ -59,32 +62,34 @@ export class InputHandler {
     }
   }
 
-  _orderMove(world, kick = false) {
+  /** PPM = rozkaz do kolejki: ruch / drzwi / obserwacja (Alt). Shift dokleja. */
+  _order(world, e) {
     const map = this.game.map;
+    const cmd = this.game.commandSystem;
+    const selected = this.game.selectedOperators.filter((o) => o.alive);
+    if (!selected.length) return;
+    const append = e.shiftKey;
+
+    // Alt+PPM = węzeł obserwacji kierunku (zawsze na koniec kolejki)
+    if (e.altKey) {
+      for (const op of selected) cmd.queueWatch(op, world.x, world.y);
+      return;
+    }
+
     const tile = map.worldToTile(world.x, world.y);
     const door = map.doorAt(tile.col, tile.row);
-
     // PPM na zamkniętych drzwiach = akcja na drzwiach (najbliższy zaznaczony
     // operator); Ctrl = KICK, bez Ctrl = ciche otwarcie
     if (door && door.state === 'closed') {
-      const selected = this.game.selectedOperators;
-      if (!selected.length) return;
       const doorPos = map.tileToWorld(door.x, door.y);
       const nearest = selected.reduce((best, op) =>
         Math.hypot(op.x - doorPos.x, op.y - doorPos.y)
           < Math.hypot(best.x - doorPos.x, best.y - doorPos.y) ? op : best);
-      this.game.doorSystem.orderDoorAction(nearest, door, kick ? 'KICK' : 'OPEN_SLOW');
+      cmd.queueDoor(nearest, door, e.ctrlKey ? 'KICK' : 'OPEN_SLOW', append);
       return;
     }
 
-    for (const op of this.game.operators) {
-      if (!op.selected || !op.alive) continue;
-      const path = map.findPathWorld(op.x, op.y, world.x, world.y);
-      if (path) {
-        op.setPath(path);
-        op.doorAction = null; // nowy rozkaz ruchu anuluje akcję na drzwiach
-      }
-    }
+    for (const op of selected) cmd.queueMove(op, world.x, world.y, append);
   }
 
   _onWheel(e) {
@@ -97,6 +102,14 @@ export class InputHandler {
     if (e.code === 'Space') {
       e.preventDefault();
       this.game.toggleExecution();
+    } else if (e.code === 'KeyS') {
+      // przystanek: zaznaczeni czekają w tym punkcie planu na sygnał GO
+      for (const op of this.game.selectedOperators) {
+        if (op.alive) this.game.commandSystem.queueStop(op);
+      }
+    } else if (e.code === 'KeyG') {
+      // GO tylko w akcji — wciśnięty w PLANNING nie może "wisieć" do wznowienia
+      if (this.game.state === 'EXECUTING') this.game.commandSystem.go();
     }
   }
 }

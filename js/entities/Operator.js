@@ -22,5 +22,10 @@ export class Operator extends Entity {
      * @type {{door: import('./Door.js').Door, type: 'OPEN_SLOW'|'KICK', timer: number}|null}
      */
     this.doorAction = null;
+    /**
+     * Kolejka rozkazów na ścieżce (tylko dane — buduje i wykonuje CommandSystem).
+     * @type {import('../systems/CommandSystem.js').OrderNode[]}
+     */
+    this.orders = [];
   }
 }

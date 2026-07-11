@@ -18,7 +18,7 @@ The authoritative spec is **[docs/DESIGN.md](docs/DESIGN.md)** (*BREACH – Game
 
 - **Run locally:** `python -m http.server 8000` in the project root, then open `http://localhost:8000`. ES modules + `fetch()` of maps do **not** work over `file://` — a static HTTP server is mandatory.
 
-- **Tests:** `test-smoke.html` is the whole harness (77 assertions, no test runner, no framework). It renders `ALL-PASS` or `FAILURES: <n>` into `<pre id="out">`. Serve, then run headless Chrome. This is a **Windows** box; both Chrome and Edge are installed. Run it from the Bash tool (the pipeline below is POSIX `sed`, not PowerShell):
+- **Tests:** `test-smoke.html` is the whole harness (88 assertions, no test runner, no framework). It renders `ALL-PASS` or `FAILURES: <n>` into `<pre id="out">`. Serve, then run headless Chrome. This is a **Windows** box; both Chrome and Edge are installed. Run it from the Bash tool (the pipeline below is POSIX `sed`, not PowerShell):
   ```bash
   python -m http.server 8000 &
   "/c/Program Files/Google/Chrome/Application/chrome.exe" \
@@ -99,7 +99,7 @@ This is deliberate: Detection runs **after** movement so perception uses this fr
 
 ## Roadmap position
 
-Sprints 1–5 are complete. Next is **Sprint 6** (tactical pause + path orders: queueing in PLANNING). Sprint order lives in [README.md](README.md) and [docs/DESIGN.md](docs/DESIGN.md).
+Sprints 1–6 are complete. Next is **Sprint 7** (gadgets: flashbang, breach charge — adds the `THROW_FLASHBANG` and `BREACH_DOOR` order nodes deferred from Sprint 6). Sprint order lives in [README.md](README.md) and [docs/DESIGN.md](docs/DESIGN.md).
 
 **Sprint 1–2 — map, camera, operator, enemies.** Pathfinding via `MapData.findPathWorld`. [js/entities/Enemy.js](js/entities/Enemy.js), [js/systems/DetectionSystem.js](js/systems/DetectionSystem.js) (vision cone + LOS raycast over `losMask` via `MapData.castRay` / `hasLineOfSight`), [js/systems/AISystem.js](js/systems/AISystem.js) (PATROL / IDLE / ALERT with alert propagation).
 
@@ -109,6 +109,8 @@ Sprints 1–5 are complete. Next is **Sprint 6** (tactical pause + path orders: 
 - current vision polygons are cut clear via `destination-out`.
 
 There is **no** "unexplored" state and **no** explored-memory canvas. Order paths are drawn **above** the fog (in `FogRenderer`, not `EntityRenderer`) so plans into dimmed rooms stay readable. Fog rays that hit a blocker are extended `FOG_REVEAL_PX` into the blocking tile so a wall/door you're looking at reads as seen, not dimmed (`VisionSystem._revealPoint`; the smoke tests assert the extended endpoints). Fog dims **terrain only** — hiding enemies is `EntityRenderer`'s job via the visible-enemies set.
+
+**Sprint 6 — path orders.** [js/systems/CommandSystem.js](js/systems/CommandSystem.js) executes the per-operator order queue (`op.orders`, data on the operator) at the brief's slot 4: after Movement, before DoorSystem. Node types: `MOVE`, `DOOR` (delegates to `DoorSystem.orderDoorAction` — DoorSystem remains the sole door executor), `WATCH` (turn toward a point, `OPERATOR_TURN_RATE`; CombatSystem overrides `direction` while engaged, so the node finishes after contact ends — intended), `STOP` (hold until the GO signal; `go()` releases every waiting operator in the same frame — a go-code for synchronized entries). `BREACH_DOOR`/`THROW_FLASHBANG` wait for Sprint 7. **A MOVE node's path is computed when the node activates, not when queued** — so a MOVE queued behind a DOOR node paths through the just-opened door; the `preview` polyline computed at queue time is for plan rendering only and may be null (e.g. target behind a closed door — FogRenderer falls back to a straight dashed line). Input: right-click replaces the queue, Shift+right-click appends, Alt+right-click appends a WATCH node, `S` appends a STOP, `G` fires GO (EXECUTING only — a GO pressed in PLANNING must not linger). Order-node markers (MOVE circle, DOOR square, WATCH arrow, STOP diamond) are drawn by `FogRenderer._drawPlan` above the fog. A corpse drops its queue (`CombatSystem._applyDamage` and a guard in `CommandSystem.update`).
 
 **Sprint 4 — doors.** [js/entities/Door.js](js/entities/Door.js) is data only (`closed` / `open` / `breached`). [js/systems/DoorSystem.js](js/systems/DoorSystem.js) is the **only** place allowed to change `door.state`: `setState` runs the brief's full door contract — `MapData.rebuildMasks()` (both masks + PF grid), then the `onDoorChanged` callback that `Game` wires to `MapRenderer.markDirty()`. Door orders live on the operator as data (`op.doorAction`); the operator paths to an approach tile, then DoorSystem executes `OPEN_SLOW` (quiet, `DOOR_OPEN_SLOW_S`) or `KICK` (instant + `DetectionSystem.raiseNoise`, alerting enemies within `KICK_ALERT_TILES` — pure radius, sound ignores walls). Input: right-click a closed door = quiet open, Ctrl+right-click = kick (nearest selected operator); a plain move order cancels a pending `doorAction`. `BREACH` waits for Sprint 7 (breach charge), but the `breached` state is already handled by masks and renderer.
 

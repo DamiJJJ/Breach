@@ -13,6 +13,7 @@ import { AISystem } from './js/systems/AISystem.js';
 import { VisionSystem } from './js/systems/VisionSystem.js';
 import { DoorSystem } from './js/systems/DoorSystem.js';
 import { CombatSystem } from './js/systems/CombatSystem.js';
+import { CommandSystem } from './js/systems/CommandSystem.js';
 import { Bullet } from './js/entities/Bullet.js';
 import { CFG } from './js/core/Config.js';
 
@@ -291,6 +292,72 @@ try {
   step5([mark], [hunter], Math.ceil((CFG.ENEMY_AIM_S + shotsToKill * CFG.ENEMY_FIRE_COOLDOWN_S + 0.5) * 60));
   ok('enemy return fire kills operator', mark.alive === false && mark.hp === 0);
   ok('dead operator deselected', mark.selected === false && mark.path.length === 0);
+
+  // --- Sprint 6: rozkazy na ścieżce (CommandSystem) ---
+  const map6 = await MapData.load('maps/mission_01.json'); // świeże drzwi
+  const det6 = new DetectionSystem({ map: map6 });
+  const doors6 = new DoorSystem({ map: map6, detection: det6 });
+  const cmd = new CommandSystem({ map: map6, doorSystem: doors6 });
+  const at6 = (c, r) => map6.tileToWorld(c, r);
+  // krok jak w Game.update: Movement -> Command -> DoorSystem
+  const run6 = (op, n) => { for (let i = 0; i < n; i++) { op.update(1 / 60); cmd.update([op], 1 / 60); doors6.update([op], [], 1 / 60); } };
+
+  // kolejka dwóch MOVE (append) — operator odwiedza punkty po kolei
+  const runner = new Operator(at6(2, 2).x, at6(2, 2).y, 60);
+  cmd.queueMove(runner, at6(5, 2).x, at6(5, 2).y, false);
+  cmd.queueMove(runner, at6(5, 5).x, at6(5, 5).y, true);
+  ok('queue holds two nodes', runner.orders.length === 2 && runner.orders.every(n => n.type === 'MOVE'));
+  ok('queued move has preview path', Array.isArray(runner.orders[0].preview) && runner.orders[0].preview.length > 0);
+  run6(runner, 60 * 8);
+  ok('queued moves executed in order', runner.orders.length === 0
+    && Math.hypot(runner.x - at6(5, 5).x, runner.y - at6(5, 5).y) < 1);
+
+  // rozkaz bez append zastępuje całą kolejkę
+  cmd.queueMove(runner, at6(2, 2).x, at6(2, 2).y, true);
+  cmd.queueMove(runner, at6(8, 2).x, at6(8, 2).y, true);
+  cmd.queueMove(runner, at6(5, 2).x, at6(5, 2).y, false);
+  ok('replace clears queue', runner.orders.length === 1);
+  cmd.clearOrders(runner);
+
+  // STOP wstrzymuje plan do sygnału GO (go-code)
+  const holder = new Operator(at6(2, 2).x, at6(2, 2).y, 61);
+  cmd.queueMove(holder, at6(5, 2).x, at6(5, 2).y, false);
+  cmd.queueStop(holder);
+  cmd.queueMove(holder, at6(8, 2).x, at6(8, 2).y, true);
+  run6(holder, 60 * 4);
+  ok('STOP holds at waypoint', holder.orders.length === 2 && holder.orders[0].type === 'STOP'
+    && Math.hypot(holder.x - at6(5, 2).x, holder.y - at6(5, 2).y) < 1);
+  cmd.go();
+  run6(holder, 60 * 4);
+  ok('GO releases STOP', holder.orders.length === 0
+    && Math.hypot(holder.x - at6(8, 2).x, holder.y - at6(8, 2).y) < 1);
+
+  // WATCH obraca operatora ku wskazanemu punktowi
+  const watcher = new Operator(at6(2, 2).x, at6(2, 2).y, 62);
+  watcher.direction = 0;
+  cmd.queueWatch(watcher, at6(2, 5).x, at6(2, 5).y); // punkt dokładnie pod nim
+  run6(watcher, 60);
+  ok('WATCH turns operator', watcher.orders.length === 0 && Math.abs(watcher.direction - Math.PI / 2) < 0.01);
+
+  // węzeł DOOR + MOVE za drzwi: ścieżka MOVE liczona przy AKTYWACJI,
+  // po otwarciu drzwi — w chwili planowania cel jest nieosiągalny
+  const breacher = new Operator(at6(2, 10).x, at6(2, 10).y, 63);
+  const d6 = map6.doorAt(4, 13);
+  ok('room unreachable while door closed',
+    map6.findPathWorld(breacher.x, breacher.y, at6(2, 15).x, at6(2, 15).y) === null);
+  cmd.queueDoor(breacher, d6, 'OPEN_SLOW', false);
+  cmd.queueMove(breacher, at6(2, 15).x, at6(2, 15).y, true);
+  run6(breacher, 60 * 15);
+  ok('DOOR node opens door', d6.state === 'open');
+  ok('queued move passes opened door', breacher.orders.length === 0
+    && Math.hypot(breacher.x - at6(2, 15).x, breacher.y - at6(2, 15).y) < 1);
+
+  // trup nie wykonuje planu
+  const casualty = new Operator(at6(2, 2).x, at6(2, 2).y, 64);
+  cmd.queueMove(casualty, at6(5, 2).x, at6(5, 2).y, false);
+  casualty.alive = false;
+  cmd.update([casualty], 1 / 60);
+  ok('dead operator drops orders', casualty.orders.length === 0);
 
   const fails = out.filter(l => l.startsWith('FAIL')).length;
   out.push(fails === 0 ? 'ALL-PASS' : `FAILURES: ${fails}`);

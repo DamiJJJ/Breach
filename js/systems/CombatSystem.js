@@ -176,6 +176,7 @@ export class CombatSystem {
     entity.combatTarget = null;
     if ('selected' in entity) entity.selected = false;
     if ('doorAction' in entity) entity.doorAction = null;
+    if ('orders' in entity) entity.orders.length = 0;
   }
 
   /** Smuga z puli: pierwsza wolna, a przy pełnej puli — najstarsza (reużycie). */

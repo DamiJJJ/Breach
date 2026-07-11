@@ -12,9 +12,11 @@ import { CFG } from '../core/Config.js';
  * (feedback z testów: pełne zakrycie utrudniało planowanie, a fabularnie
  * oddział ma mapę obiektu).
  *
- * Ścieżki rozkazów zaznaczonych operatorów rysowane są NAD mgłą — plan
- * wejścia w przyciemnione pomieszczenia musi pozostać w pełni czytelny
- * (dlatego ich rysowanie mieszka tu, nie w EntityRenderer pod mgłą).
+ * Plany rozkazów zaznaczonych operatorów (żywa ścieżka + węzły kolejki
+ * CommandSystemu ze znacznikami: MOVE koło, DOOR kwadrat, WATCH strzałka,
+ * STOP romb) rysowane są NAD mgłą — plan wejścia w przyciemnione
+ * pomieszczenia musi pozostać w pełni czytelny (dlatego ich rysowanie
+ * mieszka tu, nie w EntityRenderer pod mgłą).
  */
 export class FogRenderer {
   /**
@@ -51,7 +53,7 @@ export class FogRenderer {
     for (const poly of polygons) this._fillPolygon(ctx, poly);
     ctx.globalCompositeOperation = 'source-over';
 
-    for (const op of selectedOperators) this._drawPath(ctx, op);
+    for (const op of selectedOperators) this._drawPlan(ctx, op);
   }
 
   _fillPolygon(ctx, points) {
@@ -63,23 +65,91 @@ export class FogRenderer {
     ctx.fill();
   }
 
-  _drawPath(ctx, op) {
-    if (!op.path.length) return;
+  /** Żywa ścieżka + zakolejkowane węzły rozkazów (pisak wędruje po planie). */
+  _drawPlan(ctx, op) {
+    if (!op.path.length && !op.orders.length) return;
     ctx.save();
     ctx.strokeStyle = 'rgba(124, 252, 155, 0.5)';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo(op.x, op.y);
-    for (const wp of op.path) ctx.lineTo(wp.x, wp.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
 
-    const end = op.path[op.path.length - 1];
-    ctx.strokeStyle = 'rgba(124, 252, 155, 0.9)';
-    ctx.beginPath();
-    ctx.arc(end.x, end.y, 6, 0, Math.PI * 2);
-    ctx.stroke();
+    let penX = op.x;
+    let penY = op.y;
+    if (op.path.length) {
+      ctx.beginPath();
+      ctx.moveTo(op.x, op.y);
+      for (const wp of op.path) ctx.lineTo(wp.x, wp.y);
+      ctx.stroke();
+      const end = op.path[op.path.length - 1];
+      penX = end.x;
+      penY = end.y;
+    }
+
+    for (const node of op.orders) {
+      if (node.type === 'MOVE' || node.type === 'DOOR') {
+        ctx.beginPath();
+        ctx.moveTo(penX, penY);
+        // preview nieaktywnego MOVE; aktywny idzie już żywą ścieżką wyżej
+        if (node.type === 'MOVE' && node.preview && !node.started) {
+          for (const wp of node.preview) ctx.lineTo(wp.x, wp.y);
+        }
+        ctx.lineTo(node.x, node.y);
+        ctx.stroke();
+        penX = node.x;
+        penY = node.y;
+      }
+      this._drawOrderMarker(ctx, node, penX, penY);
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  /** Znacznik węzła: MOVE koło, DOOR kwadrat, WATCH strzałka, STOP romb. */
+  _drawOrderMarker(ctx, node, penX, penY) {
+    ctx.save();
+    ctx.setLineDash([]);
+    switch (node.type) {
+      case 'MOVE':
+        ctx.strokeStyle = 'rgba(124, 252, 155, 0.9)';
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 6, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      case 'DOOR':
+        ctx.strokeStyle = 'rgba(252, 196, 124, 0.9)';
+        ctx.strokeRect(node.x - 6, node.y - 6, 12, 12);
+        break;
+      case 'WATCH': {
+        // strzałka z punktu planu w obserwowanym kierunku
+        const angle = Math.atan2(node.y - penY, node.x - penX);
+        const len = 18;
+        const tipX = penX + Math.cos(angle) * len;
+        const tipY = penY + Math.sin(angle) * len;
+        ctx.strokeStyle = 'rgba(124, 200, 252, 0.9)';
+        ctx.fillStyle = 'rgba(124, 200, 252, 0.9)';
+        ctx.beginPath();
+        ctx.moveTo(penX, penY);
+        ctx.lineTo(tipX, tipY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(tipX + Math.cos(angle) * 6, tipY + Math.sin(angle) * 6);
+        ctx.lineTo(tipX + Math.cos(angle + 2.5) * 6, tipY + Math.sin(angle + 2.5) * 6);
+        ctx.lineTo(tipX + Math.cos(angle - 2.5) * 6, tipY + Math.sin(angle - 2.5) * 6);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case 'STOP':
+        ctx.strokeStyle = 'rgba(252, 124, 124, 0.9)';
+        ctx.beginPath();
+        ctx.moveTo(penX, penY - 8);
+        ctx.lineTo(penX + 8, penY);
+        ctx.lineTo(penX, penY + 8);
+        ctx.lineTo(penX - 8, penY);
+        ctx.closePath();
+        ctx.stroke();
+        break;
+    }
     ctx.restore();
   }
 }
