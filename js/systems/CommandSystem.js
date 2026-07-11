@@ -4,11 +4,11 @@ import { CFG } from '../core/Config.js';
  * Węzeł kolejki rozkazów operatora (dane na op.orders — buduje i wykonuje
  * wyłącznie CommandSystem).
  * @typedef {object} OrderNode
- * @property {'MOVE'|'DOOR'|'WATCH'|'STOP'} type
- * @property {number} [x] cel w world px (MOVE/WATCH; dla DOOR środek drzwi)
+ * @property {'MOVE'|'DOOR'|'WATCH'|'STOP'|'FLASH'} type
+ * @property {number} [x] cel w world px (MOVE/WATCH/FLASH; dla DOOR środek drzwi)
  * @property {number} [y]
  * @property {import('../entities/Door.js').Door} [door] (DOOR)
- * @property {'OPEN_SLOW'|'KICK'} [action] (DOOR)
+ * @property {'OPEN_SLOW'|'KICK'|'BREACH'} [action] (DOOR)
  * @property {{x:number,y:number}[]|null} [preview] trasa do podglądu planu
  *   (MOVE; liczona przy kolejkowaniu — może być null, gdy cel chwilowo
  *   zablokowany np. zamkniętymi drzwiami)
@@ -23,7 +23,9 @@ import { CFG } from '../core/Config.js';
  * Węzły briefu: MOVE, STOP (czeka na sygnał GO — go-code do synchronizacji
  * wejść z kilku stron), WATCH_DIRECTION (obrót ku punktowi), DOOR (deleguje
  * do DoorSystem.orderDoorAction — wykonawcą akcji na drzwiach pozostaje
- * DoorSystem). BREACH_DOOR i THROW_FLASHBANG dojdą w Sprincie 7 (gadżety).
+ * DoorSystem; od Sprintu 7 także akcja BREACH) oraz FLASH (Sprint 7: rzut
+ * flashbangiem przez GadgetSystem; poza zasięgiem rzutu operator najpierw
+ * podchodzi ścieżką, rzuca gdy tylko ma zasięg i LOS).
  *
  * Ścieżka węzła MOVE jest liczona przy AKTYWACJI węzła, nie przy kolejkowaniu
  * — dzięki temu MOVE za węzłem DOOR przechodzi przez drzwi, które w chwili
@@ -37,10 +39,13 @@ export class CommandSystem {
    * @param {import('../map/MapData.js').MapData} deps.map
    * @param {import('./DoorSystem.js').DoorSystem} deps.doorSystem wykonawca
    *   węzłów DOOR (wstrzykuje Game — systemy nie importują się nawzajem)
+   * @param {import('./GadgetSystem.js').GadgetSystem} [deps.gadgetSystem]
+   *   wykonawca węzłów FLASH (rzut flashbangiem)
    */
-  constructor({ map, doorSystem }) {
+  constructor({ map, doorSystem, gadgetSystem = null }) {
     this.map = map;
     this.doorSystem = doorSystem;
+    this.gadgetSystem = gadgetSystem;
     this._goSignal = false; // sygnał GO — zwalnia węzły STOP w tej klatce
   }
 
@@ -92,6 +97,14 @@ export class CommandSystem {
   }
 
   /**
+   * Rzut flashbangiem w punkt. @param {boolean} append
+   */
+  queueFlash(op, x, y, append) {
+    if (!append) this.clearOrders(op);
+    op.orders.push({ type: 'FLASH', x, y, preview: null, started: false });
+  }
+
+  /**
    * Wykonanie czoła kolejki każdego operatora. Wołane tylko w EXECUTING,
    * po Movement (dotarcie do węzła widziane w tej samej klatce).
    * @param {import('../entities/Operator.js').Operator[]} operators
@@ -103,6 +116,7 @@ export class CommandSystem {
         if (op.orders.length) op.orders.length = 0; // trup nie wykonuje planu
         continue;
       }
+      if (op.stunTimer > 0) continue; // ogłuszony: plan zamrożony
       const node = op.orders[0];
       if (!node) continue;
 
@@ -143,6 +157,35 @@ export class CommandSystem {
         case 'STOP':
           if (this._goSignal) op.orders.shift();
           break;
+
+        case 'FLASH': {
+          const gadget = op.gadget;
+          if (!this.gadgetSystem || gadget?.type !== 'FLASHBANG' || gadget.uses <= 0) {
+            op.orders.shift(); // brak granatu — węzeł przepada
+            break;
+          }
+          const inRange =
+            Math.hypot(node.x - op.x, node.y - op.y) <= CFG.FLASH_THROW_TILES * this.map.tileSize
+            && this.map.hasLineOfSight(op.x, op.y, node.x, node.y);
+          if (inRange) {
+            op.setPath([]); // stój i rzucaj
+            op.direction = Math.atan2(node.y - op.y, node.x - op.x);
+            this.gadgetSystem.throwFlash(op, node.x, node.y);
+            op.orders.shift();
+          } else if (!node.started) {
+            node.started = true;
+            // za daleko / bez LOS — podejdź; rzut wypadnie w drodze
+            const path = this.map.findPathWorld(op.x, op.y, node.x, node.y);
+            if (!path) {
+              op.orders.shift(); // nie da się podejść — węzeł przepada
+              break;
+            }
+            op.setPath(path);
+          } else if (!op.path.length) {
+            op.orders.shift(); // doszedł, a rzut nadal niemożliwy — porzuć
+          }
+          break;
+        }
       }
     }
     this._goSignal = false; // GO działa na wszystkich w jednej klatce

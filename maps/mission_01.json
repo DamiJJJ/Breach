@@ -57,11 +57,13 @@
   "player_spawn": [
     {
       "x": 2,
-      "y": 2
+      "y": 2,
+      "gadget": "FLASHBANG"
     },
     {
       "x": 3,
-      "y": 2
+      "y": 2,
+      "gadget": "BREACH_CHARGE"
     }
   ],
   "enemies": [

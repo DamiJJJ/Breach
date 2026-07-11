@@ -27,5 +27,11 @@ export class Operator extends Entity {
      * @type {import('../systems/CommandSystem.js').OrderNode[]}
      */
     this.orders = [];
+    /**
+     * Slot gadżetu (brief #9) — przydziela Game ze spawnu mapy; użycia
+     * zdejmują GadgetSystem (flashbang) i DoorSystem (breach charge).
+     * @type {{type:'FLASHBANG'|'BREACH_CHARGE', uses:number}|null}
+     */
+    this.gadget = null;
   }
 }

@@ -26,7 +26,9 @@ python -m http.server 8000
 | Dołącz rozkaz do kolejki planu | Shift + PPM |
 | Ciche otwarcie drzwi | PPM na zamkniętych drzwiach |
 | Kopniak w drzwi (hałas → alarm) | Ctrl + PPM na zamkniętych drzwiach |
+| Ładunek wybuchowy na drzwiach (BREACH) | Alt + PPM na zamkniętych drzwiach |
 | Węzeł obserwacji kierunku (WATCH) | Alt + PPM |
+| Rzut flashbangiem w punkt pod kursorem | F (Shift+F dokleja do kolejki) |
 | Przystanek w planie (STOP, czeka na GO) | S |
 | Sygnał GO (zwalnia wszystkie STOP-y) | G (w akcji) |
 | Start / pauza taktyczna | SPACJA |
@@ -38,7 +40,7 @@ python -m http.server 8000
 js/core       Config, Game (state machine), GameLoop (fixed timestep), InputHandler, MathUtils
 js/rendering  Camera (screenToWorld = odwrotność transformu renderu), MapRenderer (offscreen), EntityRenderer, FogRenderer (mgła + plany rozkazów ze znacznikami węzłów)
 js/entities   Entity, Operator, Enemy, Door, Bullet (tracer z puli; encje nie importują systemów)
-js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzenia + LOS), VisionSystem (widzenie drużyny → mgła), DoorSystem (jedyne miejsce zmiany stanu drzwi), CombatSystem (hitscan + friendly fire), CommandSystem (kolejka rozkazów MOVE/DOOR/WATCH/STOP + sygnał GO)
+js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzenia + LOS), VisionSystem (widzenie drużyny → mgła), DoorSystem (jedyne miejsce zmiany stanu drzwi; OPEN_SLOW/KICK/BREACH), CombatSystem (hitscan + friendly fire), CommandSystem (kolejka rozkazów MOVE/DOOR/WATCH/STOP/FLASH + sygnał GO), GadgetSystem (flashbang: lot, detonacja, stun)
 js/map        MapData — walidacja, maski (collision ≠ LOS), konwersje tile↔px, pathfinding, raycast
 js/ui         HUD (HTML overlay)
 maps/         mapy w naszym formacie JSON (nie Tiled)
@@ -62,7 +64,7 @@ Biblioteki z CDN: [PathFinding.js](https://github.com/qiao/PathFinding.js) (A*),
 - [x] **Sprint 4** — drzwi + synchronizacja masek
 - [x] **Sprint 5** — walka (hitscan, tracery z puli, HP, śmierć, friendly fire)
 - [x] **Sprint 6** — pauza taktyczna + rozkazy na ścieżce (kolejka MOVE/DOOR/WATCH/STOP, sygnał GO)
-- [ ] Sprint 7 — gadżety
+- [x] **Sprint 7** — gadżety (flashbang + breach charge, stan STUNNED, sloty gadżetów ze spawnów mapy)
 - [ ] Sprint 8 — PHP API + MySQL
 - [ ] Sprint 9 — UI/menu
 - [ ] Sprint 10 — dźwięk

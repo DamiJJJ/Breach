@@ -17,6 +17,7 @@ import { Door } from '../entities/Door.js';
 const TILE = { FLOOR: 'floor', WALL: 'wall', WINDOW: 'window' };
 const KNOWN_TILES = new Set(Object.values(TILE));
 const ARMOR_CLASSES = new Set(['light', 'heavy', 'armored']);
+const GADGETS = new Set(['FLASHBANG', 'BREACH_CHARGE']);
 
 export class MapData {
   /** @param {object} json — zwalidowany JSON mapy w naszym formacie */
@@ -231,6 +232,9 @@ function validateMapJson(json) {
   json.player_spawn.forEach((s, i) => {
     if (!inBounds(s.x, s.y)) fail(`player_spawn[${i}] (${s.x},${s.y}) poza mapą`);
     if (tileTypeAt(s.x, s.y) !== TILE.FLOOR) fail(`player_spawn[${i}] (${s.x},${s.y}) nie stoi na floor`);
+    if (s.gadget !== undefined && !GADGETS.has(s.gadget)) {
+      fail(`player_spawn[${i}] — gadget "${s.gadget}" (dozwolone: FLASHBANG/BREACH_CHARGE)`);
+    }
   });
 
   (json.doors ?? []).forEach((d, i) => {

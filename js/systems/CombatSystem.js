@@ -76,8 +76,8 @@ export class CombatSystem {
    */
   _updateShooter(shooter, hostiles, operators, enemies, dt, weapon) {
     shooter.fireCooldown = Math.max(0, shooter.fireCooldown - dt);
-    if (!shooter.alive) {
-      shooter.combatTarget = null;
+    if (!shooter.alive || shooter.stunTimer > 0) {
+      shooter.combatTarget = null; // STUNNED nie strzela (i AI nie "stoi w walce")
       return;
     }
 

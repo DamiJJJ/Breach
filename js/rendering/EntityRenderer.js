@@ -31,8 +31,10 @@ export class EntityRenderer {
    * @param {Set<import('../entities/Enemy.js').Enemy>|null} visibleEnemies
    *   wrogowie widoczni dla drużyny (VisionSystem); null = rysuj wszystkich
    * @param {import('../entities/Bullet.js').Bullet[]} [tracers] pula CombatSystemu
+   * @param {import('../systems/GadgetSystem.js').GadgetSystem} [gadgets]
+   *   granaty w locie + rozbłyski (Sprint 7)
    */
-  draw(camera, dpr, operators, enemies = [], visibleEnemies = null, tracers = []) {
+  draw(camera, dpr, operators, enemies = [], visibleEnemies = null, tracers = [], gadgets = null) {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -56,6 +58,10 @@ export class EntityRenderer {
       if (op.alive) this._drawOperator(ctx, op);
     }
     this._drawTracers(ctx, tracers);
+    if (gadgets) {
+      this._drawGrenades(ctx, gadgets.grenades);
+      this._drawFlashes(ctx, gadgets.flashes);
+    }
   }
 
   _drawVisionCone(ctx, enemy) {
@@ -91,6 +97,7 @@ export class EntityRenderer {
 
     this._drawDirectionTriangle(ctx, enemy, r, '#f7dcdc');
     this._drawHpBar(ctx, enemy, r);
+    this._drawStunRing(ctx, enemy, r);
 
     if (enemy.state === 'ALERT') {
       ctx.fillStyle = '#ff5050';
@@ -123,6 +130,44 @@ export class EntityRenderer {
 
     this._drawDirectionTriangle(ctx, op, r, '#dce9f7');
     this._drawHpBar(ctx, op, r);
+    this._drawStunRing(ctx, op, r);
+  }
+
+  /** Granaty w locie: mały ciemnożółty punkt. */
+  _drawGrenades(ctx, grenades) {
+    ctx.fillStyle = '#c9b458';
+    for (const g of grenades) {
+      ctx.beginPath();
+      ctx.arc(g.gx, g.gy, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /** Rozbłysk flasha: rozszerzający się, gasnący biały okrąg. */
+  _drawFlashes(ctx, flashes) {
+    ctx.save();
+    for (const f of flashes) {
+      const k = 1 - f.ttl / CFG.FLASH_EFFECT_S; // 0 -> 1
+      ctx.globalAlpha = (1 - k) * 0.8;
+      ctx.fillStyle = '#fff8dc';
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, k * CFG.FLASH_RADIUS_TILES * this.map.tileSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** Przerywany żółty pierścień wokół ogłuszonej encji. */
+  _drawStunRing(ctx, entity, r) {
+    if (entity.stunTimer <= 0) return;
+    ctx.save();
+    ctx.strokeStyle = '#ffe066';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, r + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** Pasek HP pod encją — tylko gdy ranna (pełne zdrowie nie robi szumu). */

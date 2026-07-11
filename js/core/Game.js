@@ -8,12 +8,14 @@ import { CombatSystem } from '../systems/CombatSystem.js';
 import { CommandSystem } from '../systems/CommandSystem.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
 import { DoorSystem } from '../systems/DoorSystem.js';
+import { GadgetSystem } from '../systems/GadgetSystem.js';
 import { VisionSystem } from '../systems/VisionSystem.js';
 import { FogRenderer } from '../rendering/FogRenderer.js';
 import { GameLoop } from './GameLoop.js';
 import { InputHandler } from './InputHandler.js';
 import { HUD } from '../ui/HUD.js';
 import { degToRad } from './MathUtils.js';
+import { CFG } from './Config.js';
 
 /**
  * Główna klasa gry: maszyna stanów PLANNING/EXECUTING/RESULT, skleja systemy
@@ -42,7 +44,11 @@ export class Game {
 
     this.operators = map.playerSpawns.map((s, i) => {
       const pos = map.tileToWorld(s.x, s.y);
-      return new Operator(pos.x, pos.y, i);
+      const op = new Operator(pos.x, pos.y, i);
+      // slot gadżetu ze spawnu mapy; bez wpisu — naprzemienny domyślny zestaw
+      const gadgetType = s.gadget ?? (i % 2 === 0 ? 'FLASHBANG' : 'BREACH_CHARGE');
+      op.gadget = { type: gadgetType, uses: CFG.GADGET_COUNT[gadgetType] };
+      return op;
     });
     this.operators[0].selected = true;
 
@@ -67,7 +73,12 @@ export class Game {
       detection: this.detectionSystem,
       onDoorChanged: () => this.mapRenderer.markDirty(),
     });
-    this.commandSystem = new CommandSystem({ map, doorSystem: this.doorSystem });
+    this.gadgetSystem = new GadgetSystem({ map, detection: this.detectionSystem });
+    this.commandSystem = new CommandSystem({
+      map,
+      doorSystem: this.doorSystem,
+      gadgetSystem: this.gadgetSystem,
+    });
     this.combatSystem = new CombatSystem({ detection: this.detectionSystem });
     this.visionSystem = new VisionSystem({ map, detection: this.detectionSystem });
     this.fogRenderer = new FogRenderer(map, canvases.fog);
@@ -122,6 +133,8 @@ export class Game {
     // 4b. DoorSystem — wykonawca akcji na drzwiach (węzły DOOR delegują tu);
     //     przed detekcją, żeby otwarcie drzwi było widoczne w tej samej klatce
     this.doorSystem.update(this.operators, this.enemies, dt);
+    // 4c. Gadget — lot i detonacja granatów; stun PRZED percepcją tej klatki
+    this.gadgetSystem.update(this.operators, this.enemies, dt);
     // 5. Detection — percepcja po ruchu, na pozycjach z tej klatki
     this.detectionSystem.update(this.enemies, this.operators);
     // 6. Combat — hitscan; MUSI stać PO Detection (świeży LOS — CLAUDE.md),
@@ -138,7 +151,7 @@ export class Game {
     // widzenie liczone w fazie renderu, nie update — mgła musi żyć też w PLANNING
     const vision = this.visionSystem.compute(this.operators, this.enemies);
     this.mapRenderer.draw(this.camera, this.dpr);
-    this.entityRenderer.draw(this.camera, this.dpr, this.operators, this.enemies, vision.visibleEnemies, this.combatSystem.tracers);
+    this.entityRenderer.draw(this.camera, this.dpr, this.operators, this.enemies, vision.visibleEnemies, this.combatSystem.tracers, this.gadgetSystem);
     this.fogRenderer.draw(this.camera, this.dpr, vision.polygons, this.selectedOperators);
   }
 

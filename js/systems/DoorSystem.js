@@ -1,14 +1,17 @@
 import { CFG } from '../core/Config.js';
+import { angleDiff, degToRad } from '../core/MathUtils.js';
 
 /**
- * Akcje na drzwiach (Sprint 4). Zalążek CommandSystem — w kolejności pętli
- * update stoi na pozycji 4 (po Movement, przed Detection), więc otwarcie
- * drzwi jest widoczne dla percepcji jeszcze w tej samej klatce.
+ * Akcje na drzwiach (Sprint 4; wykonawca węzłów DOOR CommandSystemu od
+ * Sprintu 6). W kolejności pętli update stoi po Movement, przed Detection,
+ * więc otwarcie drzwi jest widoczne dla percepcji jeszcze w tej samej klatce.
  *
  * Akcje briefu: OPEN_SLOW (ciche, DOOR_OPEN_SLOW_S), KICK (natychmiast,
- * hałas alarmuje wrogów w promieniu KICK_ALERT_TILES od drzwi). BREACH
- * czeka na ładunek wybuchowy (Sprint 7) — stan 'breached' jest już
- * obsługiwany przez maski i render.
+ * hałas alarmuje wrogów w promieniu KICK_ALERT_TILES od drzwi), BREACH
+ * (Sprint 7: wymaga gadżetu BREACH_CHARGE, podłożenie BREACH_PLANT_S,
+ * drzwi trwale 'breached', huk BREACH_ALERT_TILES, ogłuszenie w stożku
+ * BREACH_CONE_DEG od drzwi w głąb pomieszczenia — po przebudowie masek,
+ * więc test LOS błysku działa już przez wyłom).
  *
  * Rozkaz trzymany jest na operatorze (op.doorAction — tylko dane); operator
  * najpierw dochodzi ścieżką do kafelka podejścia, a gdy stanie przy drzwiach,
@@ -35,11 +38,16 @@ export class DoorSystem {
    * Rozkaz akcji na drzwiach: dojdź (jeśli trzeba) i wykonaj.
    * @param {import('../entities/Operator.js').Operator} operator
    * @param {import('../entities/Door.js').Door} door
-   * @param {'OPEN_SLOW'|'KICK'} type
-   * @returns {boolean} false gdy drzwi nie są zamknięte albo podejście nieosiągalne
+   * @param {'OPEN_SLOW'|'KICK'|'BREACH'} type
+   * @returns {boolean} false gdy drzwi nie są zamknięte, podejście
+   *   nieosiągalne albo (BREACH) brak ładunku wybuchowego
    */
   orderDoorAction(operator, door, type) {
     if (!operator?.alive || door.state !== 'closed') return false;
+    if (type === 'BREACH'
+      && (operator.gadget?.type !== 'BREACH_CHARGE' || operator.gadget.uses <= 0)) {
+      return false;
+    }
 
     if (this._inRange(operator, door)) {
       operator.setPath([]);
@@ -48,7 +56,8 @@ export class DoorSystem {
       if (!path) return false;
       operator.setPath(path);
     }
-    operator.doorAction = { door, type, timer: CFG.DOOR_OPEN_SLOW_S };
+    const timer = type === 'BREACH' ? CFG.BREACH_PLANT_S : CFG.DOOR_OPEN_SLOW_S;
+    operator.doorAction = { door, type, timer };
     return true;
   }
 
@@ -67,6 +76,7 @@ export class DoorSystem {
         op.doorAction = null; // ktoś już otworzył / operator wyeliminowany
         continue;
       }
+      if (op.stunTimer > 0) continue; // ogłuszony: dojście i odliczanie stoją
       if (op.path.length) continue; // w drodze do drzwi
 
       if (!this._inRange(op, door)) {
@@ -81,6 +91,15 @@ export class DoorSystem {
         this.setState(door, 'open');
         this.detection.raiseNoise(center.x, center.y, CFG.KICK_ALERT_TILES, enemies);
         op.doorAction = null;
+      } else if (action.type === 'BREACH') { // podłożenie ładunku, potem wybuch
+        action.timer -= dt;
+        if (action.timer <= 0) {
+          op.gadget.uses--;
+          this.setState(door, 'breached'); // maski już przebudowane dla stożka
+          this.detection.raiseNoise(center.x, center.y, CFG.BREACH_ALERT_TILES, enemies);
+          this._breachStun(op, center, operators, enemies);
+          op.doorAction = null;
+        }
       } else { // OPEN_SLOW — cicho, po czasie
         action.timer -= dt;
         if (action.timer <= 0) {
@@ -88,6 +107,31 @@ export class DoorSystem {
           op.doorAction = null;
         }
       }
+    }
+  }
+
+  /**
+   * Ogłuszenie wybuchu breach: stożek BREACH_CONE_DEG od środka drzwi
+   * w głąb (od operatora), zasięg BREACH_STUN_TILES, z testem LOS od drzwi
+   * (wyłom już otwarty). Działa na obie strony — także na operatorów.
+   */
+  _breachStun(op, center, operators, enemies) {
+    const coneDir = Math.atan2(center.y - op.y, center.x - op.x);
+    this._stunCone(center, coneDir, operators);
+    this._stunCone(center, coneDir, enemies);
+  }
+
+  _stunCone(center, coneDir, list) {
+    const radius = CFG.BREACH_STUN_TILES * this.map.tileSize;
+    const half = degToRad(CFG.BREACH_CONE_DEG) / 2;
+    for (const entity of list) {
+      if (!entity.alive) continue;
+      const dist = Math.hypot(entity.x - center.x, entity.y - center.y);
+      if (dist > radius) continue;
+      const angle = Math.atan2(entity.y - center.y, entity.x - center.x);
+      if (Math.abs(angleDiff(coneDir, angle)) > half) continue;
+      if (!this.map.hasLineOfSight(center.x, center.y, entity.x, entity.y)) continue;
+      entity.stunTimer = Math.max(entity.stunTimer, CFG.FLASH_STUN_S);
     }
   }
 

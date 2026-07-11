@@ -27,6 +27,11 @@ export class Entity {
     this.aimTimer = 0;     // s celowania pozostałe do pierwszego strzału
     /** @type {Entity|null} aktualnie ostrzeliwany cel */
     this.combatTarget = null;
+
+    // STUNNED (Sprint 7, flashbang/breach): nie strzela (CombatSystem),
+    // nie rusza się (update niżej), nie widzi (DetectionSystem), plan
+    // zamrożony (CommandSystem/DoorSystem/AISystem pomijają ogłuszonych).
+    this.stunTimer = 0; // s pozostałego ogłuszenia
   }
 
   /** @param {{x:number,y:number}[]|null} waypoints */
@@ -36,6 +41,10 @@ export class Entity {
 
   /** @param {number} dt sekundy */
   update(dt) {
+    if (this.stunTimer > 0) {
+      this.stunTimer = Math.max(0, this.stunTimer - dt);
+      return; // ogłuszony stoi w miejscu
+    }
     this.followPath(dt);
   }
 

@@ -22,6 +22,7 @@ export class DetectionSystem {
   update(enemies, operators) {
     for (const enemy of enemies) {
       if (!enemy.alive) continue;
+      if (enemy.stunTimer > 0) continue; // ogłuszony flashem = oślepiony
       for (const op of operators) {
         if (!op.alive) continue;
         if (this.canSee(enemy, op)) {

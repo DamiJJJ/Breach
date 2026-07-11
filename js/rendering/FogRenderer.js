@@ -14,7 +14,7 @@ import { CFG } from '../core/Config.js';
  *
  * Plany rozkazów zaznaczonych operatorów (żywa ścieżka + węzły kolejki
  * CommandSystemu ze znacznikami: MOVE koło, DOOR kwadrat, WATCH strzałka,
- * STOP romb) rysowane są NAD mgłą — plan wejścia w przyciemnione
+ * STOP romb, FLASH gwiazdka) rysowane są NAD mgłą — plan wejścia w przyciemnione
  * pomieszczenia musi pozostać w pełni czytelny (dlatego ich rysowanie
  * mieszka tu, nie w EntityRenderer pod mgłą).
  */
@@ -147,6 +147,17 @@ export class FogRenderer {
         ctx.lineTo(penX, penY + 8);
         ctx.lineTo(penX - 8, penY);
         ctx.closePath();
+        ctx.stroke();
+        break;
+      case 'FLASH':
+        // gwiazdka wybuchu w punkcie rzutu
+        ctx.strokeStyle = 'rgba(255, 224, 102, 0.9)';
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+          const a = (Math.PI * i) / 3;
+          ctx.moveTo(node.x - Math.cos(a) * 7, node.y - Math.sin(a) * 7);
+          ctx.lineTo(node.x + Math.cos(a) * 7, node.y + Math.sin(a) * 7);
+        }
         ctx.stroke();
         break;
     }

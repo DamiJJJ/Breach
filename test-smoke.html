@@ -14,6 +14,7 @@ import { VisionSystem } from './js/systems/VisionSystem.js';
 import { DoorSystem } from './js/systems/DoorSystem.js';
 import { CombatSystem } from './js/systems/CombatSystem.js';
 import { CommandSystem } from './js/systems/CommandSystem.js';
+import { GadgetSystem } from './js/systems/GadgetSystem.js';
 import { Bullet } from './js/entities/Bullet.js';
 import { CFG } from './js/core/Config.js';
 
@@ -358,6 +359,106 @@ try {
   casualty.alive = false;
   cmd.update([casualty], 1 / 60);
   ok('dead operator drops orders', casualty.orders.length === 0);
+
+  // --- Sprint 7: gadżety (flashbang, breach charge) ---
+  const map7 = await MapData.load('maps/mission_01.json'); // świeże drzwi
+  const det7 = new DetectionSystem({ map: map7 });
+  const doors7 = new DoorSystem({ map: map7, detection: det7 });
+  const gadgets7 = new GadgetSystem({ map: map7, detection: det7 });
+  const cmd7 = new CommandSystem({ map: map7, doorSystem: doors7, gadgetSystem: gadgets7 });
+  const combat7 = new CombatSystem({ detection: det7 });
+  const at7 = (c, r) => map7.tileToWorld(c, r);
+  const mkOp7 = (c, r, gadget = null) => {
+    const o = new Operator(at7(c, r).x, at7(c, r).y, 70 + c);
+    if (gadget) o.gadget = { type: gadget, uses: CFG.GADGET_COUNT[gadget] };
+    return o;
+  };
+  const mkEnemy7 = (c, r, dir = 0) => new Enemy({ id: 'e7', ...at7(c, r), type: 'stationary', facingRad: dir });
+  // krok jak w Game.update (bez AI/Combat): Movement -> Command -> Door -> Gadget -> Detection
+  const run7 = (ops, ens, n) => { for (let i = 0; i < n; i++) {
+    for (const o of ops) o.update(1 / 60);
+    for (const e of ens) e.update(1 / 60);
+    cmd7.update(ops, 1 / 60);
+    doors7.update(ops, ens, 1 / 60);
+    gadgets7.update(ops, ens, 1 / 60);
+    det7.update(ens, ops);
+  } };
+
+  // spawny mapy niosą gadżety (walidacja przyjęła schemat)
+  ok('map carries spawn gadgets', map7.playerSpawns[0].gadget === 'FLASHBANG'
+    && map7.playerSpawns[1].gadget === 'BREACH_CHARGE');
+
+  // rzut 1: błysk przechodzi przez okno (10,2), ogłusza w promieniu,
+  // nieostrożny rzut ogłusza też własnego operatora; huk alarmuje
+  const thrower = mkOp7(5, 4, 'FLASHBANG');
+  const winStun = mkEnemy7(11, 2, 0);   // za oknem, 2 kafelki od wybuchu
+  const bystander = mkOp7(8, 2);        // sojusznik 1 kafelek od wybuchu
+  cmd7.queueFlash(thrower, at7(9, 2).x, at7(9, 2).y, false);
+  run7([thrower, bystander], [winStun], Math.ceil((CFG.FLASH_FUSE_S + 0.1) * 60));
+  ok('flash stuns through window', winStun.stunTimer > 0);
+  ok('flash stuns friendly in radius', bystander.stunTimer > 0);
+  ok('flash consumes a use', thrower.gadget.uses === CFG.GADGET_COUNT.FLASHBANG - 1);
+  ok('flash noise alerts enemy', winStun.state === 'ALERT');
+
+  // rzut 2: ściana (10,6) zatrzymuje błysk — bez ogłuszenia mimo promienia
+  const wallSafe7 = mkEnemy7(11, 6, 0);
+  cmd7.queueFlash(thrower, at7(9, 6).x, at7(9, 6).y, false);
+  run7([thrower], [wallSafe7], Math.ceil((CFG.FLASH_FUSE_S + 0.1) * 60));
+  ok('wall blocks flash stun', wallSafe7.stunTimer === 0);
+  ok('flashbang supply exhausted', thrower.gadget.uses === 0);
+
+  // rzut 3: bez zapasu węzeł przepada, granat nie leci
+  cmd7.queueFlash(thrower, at7(9, 2).x, at7(9, 2).y, false);
+  cmd7.update([thrower], 1 / 60);
+  ok('no throw without supply', thrower.orders.length === 0 && gadgets7.grenades.length === 0);
+
+  // rzut poza zasięgiem: operator podchodzi ścieżką i rzuca w drodze
+  const walker = mkOp7(2, 2, 'FLASHBANG');
+  const farStun = mkEnemy7(3, 12, 0);
+  cmd7.queueFlash(walker, at7(2, 12).x, at7(2, 12).y, false);
+  run7([walker], [farStun], 60 * 4);
+  ok('out-of-range throw walks closer first', walker.y > at7(2, 2).y + map7.tileSize);
+  ok('walked throw lands and stuns', farStun.stunTimer > 0 || farStun.state === 'ALERT');
+
+  // STUNNED: nie rusza się, nie strzela, nie widzi; po FLASH_STUN_S wraca
+  const stunnedE = mkEnemy7(17, 4, Math.PI); // patrzy w lewo, prosto na cel
+  const opTarget = mkOp7(14, 4);
+  opTarget.direction = Math.PI; // odwrócony — sam nie strzela
+  stunnedE.stunTimer = CFG.FLASH_STUN_S;
+  stunnedE.setPath([at7(20, 4)]);
+  const before7 = { x: stunnedE.x, y: stunnedE.y };
+  for (let i = 0; i < 60; i++) {
+    stunnedE.update(1 / 60);
+    det7.update([stunnedE], [opTarget]);
+    combat7.update([opTarget], [stunnedE], 1 / 60);
+  }
+  ok('stunned enemy frozen and blind', opTarget.hp === CFG.OPERATOR_HP
+    && stunnedE.x === before7.x && stunnedE.y === before7.y && stunnedE.state === 'IDLE');
+  for (let i = 0; i < 60 * 3; i++) {
+    stunnedE.update(1 / 60);
+    det7.update([stunnedE], [opTarget]);
+    combat7.update([opTarget], [stunnedE], 1 / 60);
+  }
+  ok('stun wears off', stunnedE.stunTimer === 0 && stunnedE.state === 'ALERT'
+    && (stunnedE.x !== before7.x || stunnedE.y !== before7.y));
+
+  // BREACH: ładunek niszczy drzwi (trwale), maski/grid aktualne, huk
+  // alarmuje, stożek 90° ogłusza w głębi pomieszczenia — nie za plecami
+  const breacher7 = mkOp7(2, 10, 'BREACH_CHARGE');
+  const d7 = map7.doorAt(4, 13);
+  const roomStun = mkEnemy7(4, 15, -Math.PI / 2); // w osi stożka, 2 kafelki
+  const sideSafe = mkEnemy7(6, 11, 0);            // za drzwiami od strony operatora
+  cmd7.queueDoor(breacher7, d7, 'BREACH', false);
+  run7([breacher7], [roomStun, sideSafe], 60 * 3); // wybuch ~2,2 s; stun nie zdąży wygasnąć
+  ok('BREACH destroys door', d7.state === 'breached');
+  ok('breached door open in masks', map7.isWalkable(4, 13) && !map7.blocksLos(4, 13));
+  ok('BREACH consumes charge', breacher7.gadget.uses === 0);
+  ok('BREACH stuns in cone', roomStun.stunTimer > 0);
+  ok('no stun behind breacher, still alerted', sideSafe.stunTimer === 0 && sideSafe.state === 'ALERT');
+
+  // BREACH bez ładunku odrzucony
+  const noCharge = mkOp7(7, 15, 'FLASHBANG');
+  ok('BREACH requires charge', doors7.orderDoorAction(noCharge, map7.doorAt(7, 16), 'BREACH') === false);
 
   const fails = out.filter(l => l.startsWith('FAIL')).length;
   out.push(fails === 0 ? 'ALL-PASS' : `FAILURES: ${fails}`);

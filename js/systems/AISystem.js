@@ -23,6 +23,7 @@ export class AISystem {
   update(enemies, dt) {
     for (const enemy of enemies) {
       if (!enemy.alive) continue;
+      if (enemy.stunTimer > 0) continue; // ogłuszony nie podejmuje decyzji
       switch (enemy.state) {
         case 'PATROL': this._patrol(enemy, dt); break;
         case 'IDLE': this._idle(enemy, dt); break;
