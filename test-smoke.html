@@ -12,6 +12,8 @@ import { DetectionSystem } from './js/systems/DetectionSystem.js';
 import { AISystem } from './js/systems/AISystem.js';
 import { VisionSystem } from './js/systems/VisionSystem.js';
 import { DoorSystem } from './js/systems/DoorSystem.js';
+import { CombatSystem } from './js/systems/CombatSystem.js';
+import { Bullet } from './js/entities/Bullet.js';
 import { CFG } from './js/core/Config.js';
 
 const out = [];
@@ -212,6 +214,83 @@ try {
 
   // rozkaz na już otwartych drzwiach jest odrzucany
   ok('order on open door rejected', doors2.orderDoorAction(adj, dd, 'KICK') === false);
+
+  // --- Sprint 5: walka (hitscan) ---
+  const map5 = await MapData.load('maps/mission_01.json'); // świeże maski (poprzednie testy otworzyły drzwi)
+  const det5 = new DetectionSystem({ map: map5 });
+  const combat = new CombatSystem({ detection: det5 });
+  const at5 = (c, r) => map5.tileToWorld(c, r);
+  const mkOp5 = (c, r, dir = 0) => { const o = new Operator(at5(c, r).x, at5(c, r).y, 50 + c); o.direction = dir; return o; };
+  const mkEnemy5 = (c, r, dir = 0, armor = 'light') =>
+    new Enemy({ id: 'e5', ...at5(c, r), type: 'stationary', facingRad: dir, armor });
+  // krok symulacji jak w Game.update: Detection przed Combat
+  const step5 = (ops, ens, n) => { for (let i = 0; i < n; i++) { det5.update(ens, ops); combat.update(ops, ens, 1 / 60); } };
+  const aimSteps = Math.ceil((CFG.OPERATOR_AIM_S + 0.05) * 60);
+
+  // klasy pancerza wroga -> HP z konfiguracji
+  ok('enemy hp per armor class', mkEnemy5(1, 1).hp === CFG.ENEMY_HP.light
+    && mkEnemy5(1, 1, 0, 'heavy').hp === CFG.ENEMY_HP.heavy
+    && mkEnemy5(1, 1, 0, 'armored').hp === CFG.ENEMY_HP.armored
+    && mkEnemy5(1, 1).maxHp === CFG.ENEMY_HP.light);
+
+  // pula tracerów: prealokowana, nic nie lata na starcie
+  ok('tracer pool preallocated', combat.tracers.length === CFG.TRACER_POOL
+    && combat.tracers.every(t => t instanceof Bullet && !t.active));
+
+  // operator NIE strzela natychmiast — najpierw czas celowania
+  const gunner = mkOp5(15, 4, 0);
+  const victim = mkEnemy5(18, 4, 0); // patrzy w prawo, nie widzi operatora
+  step5([gunner], [victim], 1);
+  ok('no shot before aim time', victim.hp === CFG.ENEMY_HP.light);
+
+  // po celowaniu pierwszy strzał: obrażenia + tracer + prowadzenie lufy
+  step5([gunner], [victim], aimSteps);
+  ok('operator fires after aim time', victim.hp === CFG.ENEMY_HP.light - CFG.OPERATOR_DAMAGE);
+  ok('tracer spawned', combat.tracers.some(t => t.active));
+  ok('shooter tracks target', Math.abs(gunner.direction) < 0.01);
+
+  // drugi strzał po kadencji zabija light (2 x 34 > 50); trup zwalnia cel
+  step5([gunner], [victim], 60);
+  ok('enemy dies after second hit', victim.alive === false && victim.hp === 0);
+  ok('dead target released', gunner.combatTarget === null);
+  ok('tracers expire', combat.tracers.every(t => !t.active));
+
+  // hałas wystrzału: wróg za ścianą w promieniu SHOT_ALERT_TILES słyszy strzał
+  const sniper = mkOp5(15, 4, 0);
+  const prey = mkEnemy5(18, 4, 0);
+  const listener = mkEnemy5(13, 10, 0); // ~6.3 kafelka od strzelca, za ścianą (wiersz 8)
+  step5([sniper], [prey, listener], aimSteps);
+  ok('gunshot alerts enemy through wall', listener.state === 'ALERT'
+    && listener.lastKnown !== null
+    && Math.hypot(listener.lastKnown.x - sniper.x, listener.lastKnown.y - sniper.y) < 1);
+
+  // friendly fire: sojusznik na linii strzału przejmuje trafienie
+  const ff = mkOp5(15, 4, 0);
+  const blocker = mkOp5(16, 4, Math.PI); // na linii, patrzy w drugą stronę (sam nie strzela)
+  const foe = mkEnemy5(18, 4, 0);
+  step5([ff, blocker], [foe], aimSteps);
+  ok('friendly in line takes the hit', blocker.hp === CFG.OPERATOR_HP - CFG.OPERATOR_DAMAGE);
+  ok('target behind friendly unharmed', foe.hp === CFG.ENEMY_HP.light);
+
+  // pocisk przechodzi przez okno (20,8), ściana (12,8) blokuje walkę w ogóle
+  const winGunner = mkOp5(20, 7, Math.PI / 2);
+  const winVictim = mkEnemy5(20, 9, Math.PI / 2); // patrzy w dół, nie odpowiada ogniem
+  step5([winGunner], [winVictim], aimSteps);
+  ok('shot passes window', winVictim.hp < CFG.ENEMY_HP.light);
+  const wallGunner = mkOp5(12, 7, Math.PI / 2);
+  const wallSafe = mkEnemy5(12, 9, Math.PI / 2);
+  step5([wallGunner], [wallSafe], 60);
+  ok('wall prevents engagement', wallSafe.hp === CFG.ENEMY_HP.light && wallGunner.combatTarget === null);
+
+  // wróg odpowiada ogniem po ENEMY_AIM_S; śmierć operatora czyści
+  // zaznaczenie i ścieżkę (trup nie przyjmuje rozkazów)
+  const mark = mkOp5(15, 4, Math.PI); // plecami do wroga — sam nie strzela
+  mark.selected = true;
+  const hunter = mkEnemy5(18, 4, Math.PI, 'heavy');
+  const shotsToKill = Math.ceil(CFG.OPERATOR_HP / CFG.ENEMY_DAMAGE);
+  step5([mark], [hunter], Math.ceil((CFG.ENEMY_AIM_S + shotsToKill * CFG.ENEMY_FIRE_COOLDOWN_S + 0.5) * 60));
+  ok('enemy return fire kills operator', mark.alive === false && mark.hp === 0);
+  ok('dead operator deselected', mark.selected === false && mark.path.length === 0);
 
   const fails = out.filter(l => l.startsWith('FAIL')).length;
   out.push(fails === 0 ? 'ALL-PASS' : `FAILURES: ${fails}`);

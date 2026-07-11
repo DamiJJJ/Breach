@@ -33,8 +33,8 @@ python -m http.server 8000
 ```
 js/core       Config, Game (state machine), GameLoop (fixed timestep), InputHandler, MathUtils
 js/rendering  Camera (screenToWorld = odwrotność transformu renderu), MapRenderer (offscreen), EntityRenderer, FogRenderer (mgła + ścieżki rozkazów)
-js/entities   Entity, Operator, Enemy, Door (encje nie importują systemów)
-js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzenia + LOS), VisionSystem (widzenie drużyny → mgła), DoorSystem (jedyne miejsce zmiany stanu drzwi)
+js/entities   Entity, Operator, Enemy, Door, Bullet (tracer z puli; encje nie importują systemów)
+js/systems    AISystem (patrol/wartownik/alarm), DetectionSystem (stożek widzenia + LOS), VisionSystem (widzenie drużyny → mgła), DoorSystem (jedyne miejsce zmiany stanu drzwi), CombatSystem (hitscan + friendly fire)
 js/map        MapData — walidacja, maski (collision ≠ LOS), konwersje tile↔px, pathfinding, raycast
 js/ui         HUD (HTML overlay)
 maps/         mapy w naszym formacie JSON (nie Tiled)
@@ -56,7 +56,7 @@ Biblioteki z CDN: [PathFinding.js](https://github.com/qiao/PathFinding.js) (A*),
 - [x] **Sprint 2** — DetectionSystem + wrogowie + AI
 - [x] **Sprint 3** — LOS + Fog of War (VisionSystem + FogRenderer, mgła dwustanowa)
 - [x] **Sprint 4** — drzwi + synchronizacja masek
-- [ ] Sprint 5 — walka (hitscan)
+- [x] **Sprint 5** — walka (hitscan, tracery z puli, HP, śmierć, friendly fire)
 - [ ] Sprint 6 — rozkazy na ścieżce
 - [ ] Sprint 7 — gadżety
 - [ ] Sprint 8 — PHP API + MySQL

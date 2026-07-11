@@ -40,6 +40,7 @@ export class InputHandler {
     let hit = null;
     let bestDist = Infinity;
     for (const op of ops) {
+      if (!op.alive) continue; // trup nie przyjmuje rozkazów
       const d = Math.hypot(op.x - world.x, op.y - world.y);
       if (d <= CFG.SELECT_RADIUS && d < bestDist) {
         hit = op;
@@ -77,7 +78,7 @@ export class InputHandler {
     }
 
     for (const op of this.game.operators) {
-      if (!op.selected) continue;
+      if (!op.selected || !op.alive) continue;
       const path = map.findPathWorld(op.x, op.y, world.x, world.y);
       if (path) {
         op.setPath(path);

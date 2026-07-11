@@ -16,10 +16,17 @@ export class Entity {
     this.y = y;
     this.direction = 0; // radiany, 0 = w prawo, oś Y w dół
     this.hp = hp;
+    this.maxHp = hp;
     this.alive = true;
     this.speed = 0; // px/s
     /** @type {{x:number,y:number}[]} waypointy w world px */
     this.path = [];
+
+    // Pola walki (Sprint 5) — czyta i ustawia wyłącznie CombatSystem.
+    this.fireCooldown = 0; // s do następnego strzału (kadencja)
+    this.aimTimer = 0;     // s celowania pozostałe do pierwszego strzału
+    /** @type {Entity|null} aktualnie ostrzeliwany cel */
+    this.combatTarget = null;
   }
 
   /** @param {{x:number,y:number}[]|null} waypoints */

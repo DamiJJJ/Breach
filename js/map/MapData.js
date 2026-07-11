@@ -16,6 +16,7 @@ import { Door } from '../entities/Door.js';
 
 const TILE = { FLOOR: 'floor', WALL: 'wall', WINDOW: 'window' };
 const KNOWN_TILES = new Set(Object.values(TILE));
+const ARMOR_CLASSES = new Set(['light', 'heavy', 'armored']);
 
 export class MapData {
   /** @param {object} json — zwalidowany JSON mapy w naszym formacie */
@@ -245,6 +246,9 @@ function validateMapJson(json) {
   (json.enemies ?? []).forEach((e, i) => {
     if (!inBounds(e.x, e.y)) fail(`enemies[${i}] "${e.id}" (${e.x},${e.y}) poza mapą`);
     if (tileTypeAt(e.x, e.y) !== TILE.FLOOR) fail(`enemies[${i}] "${e.id}" (${e.x},${e.y}) nie stoi na floor`);
+    if (e.armor !== undefined && !ARMOR_CLASSES.has(e.armor)) {
+      fail(`enemies[${i}] "${e.id}" — armor "${e.armor}" (dozwolone: light/heavy/armored)`);
+    }
     (e.patrol ?? []).forEach(([px, py], j) => {
       if (!inBounds(px, py)) fail(`enemies[${i}].patrol[${j}] (${px},${py}) poza mapą`);
     });

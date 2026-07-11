@@ -4,6 +4,7 @@ import { EntityRenderer } from '../rendering/EntityRenderer.js';
 import { Operator } from '../entities/Operator.js';
 import { Enemy } from '../entities/Enemy.js';
 import { AISystem } from '../systems/AISystem.js';
+import { CombatSystem } from '../systems/CombatSystem.js';
 import { DetectionSystem } from '../systems/DetectionSystem.js';
 import { DoorSystem } from '../systems/DoorSystem.js';
 import { VisionSystem } from '../systems/VisionSystem.js';
@@ -53,6 +54,7 @@ export class Game {
         type: spec.type,
         facingRad: degToRad(spec.facing ?? 0),
         patrol: (spec.patrol ?? []).map(([col, row]) => map.tileToWorld(col, row)),
+        armor: spec.armor,
       });
     });
 
@@ -64,6 +66,7 @@ export class Game {
       detection: this.detectionSystem,
       onDoorChanged: () => this.mapRenderer.markDirty(),
     });
+    this.combatSystem = new CombatSystem({ detection: this.detectionSystem });
     this.visionSystem = new VisionSystem({ map, detection: this.detectionSystem });
     this.fogRenderer = new FogRenderer(map, canvases.fog);
 
@@ -117,9 +120,13 @@ export class Game {
     this.doorSystem.update(this.operators, this.enemies, dt);
     // 5. Detection — percepcja po ruchu, na pozycjach z tej klatki
     this.detectionSystem.update(this.enemies, this.operators);
-    // 8. Camera.update — follow środka zaznaczonych operatorów
-    const targets = this.selectedOperators;
-    this.camera.follow(targets.length ? targets : this.operators, dt);
+    // 6. Combat — hitscan; MUSI stać PO Detection (świeży LOS — CLAUDE.md),
+    //    to odpowiednik slotu 5 briefu w naszej kolejności
+    this.combatSystem.update(this.operators, this.enemies, dt);
+    // 8. Camera.update — follow środka zaznaczonych ŻYWYCH operatorów
+    const alive = this.operators.filter((o) => o.alive);
+    const targets = alive.filter((o) => o.selected);
+    this.camera.follow(targets.length ? targets : (alive.length ? alive : this.operators), dt);
   }
 
   /** Render — zawsze, także w PLANNING. */
@@ -127,7 +134,7 @@ export class Game {
     // widzenie liczone w fazie renderu, nie update — mgła musi żyć też w PLANNING
     const vision = this.visionSystem.compute(this.operators, this.enemies);
     this.mapRenderer.draw(this.camera, this.dpr);
-    this.entityRenderer.draw(this.camera, this.dpr, this.operators, this.enemies, vision.visibleEnemies);
+    this.entityRenderer.draw(this.camera, this.dpr, this.operators, this.enemies, vision.visibleEnemies, this.combatSystem.tracers);
     this.fogRenderer.draw(this.camera, this.dpr, vision.polygons, this.selectedOperators);
   }
 

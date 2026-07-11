@@ -32,6 +32,19 @@ export const CFG = {
   FLASH_STUN_S: 3,
   PAR_DEFAULT: 90,
 
+  // Walka (hitscan) — Sprint 5
+  OPERATOR_HP: 100,
+  ENEMY_HP: { light: 50, heavy: 100, armored: 150 }, // HP wg klasy pancerza wroga
+  OPERATOR_DAMAGE: 34,          // obrażenia na strzał
+  ENEMY_DAMAGE: 18,
+  OPERATOR_AIM_S: 0.25,         // ciągły kontakt wzrokowy przed pierwszym strzałem
+  ENEMY_AIM_S: 0.7,             // wolniejszy — przybliża briefowe "ALERT: 1 s przed COMBAT"
+  OPERATOR_FIRE_COOLDOWN_S: 0.35, // kadencja (brief: co X ms zależnie od broni)
+  ENEMY_FIRE_COOLDOWN_S: 0.9,
+  SHOT_ALERT_TILES: 7,          // hałas wystrzału operatora — przez ściany, jak KICK
+  TRACER_TTL_S: 0.07,           // czas życia smugi (brief: ~50–80 ms)
+  TRACER_POOL: 64,              // rozmiar puli tracerów — zero new w gorącej pętli
+
   MAX_DT: 1 / 30,           // klamp delty — bez teleportów po pauzie/zakładce
   STEP_MS: 1000 / 60,       // fixed timestep
 

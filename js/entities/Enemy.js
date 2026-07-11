@@ -18,11 +18,13 @@ export class Enemy extends Entity {
    * @param {'patrol'|'stationary'} spec.type
    * @param {number} [spec.facingRad] radiany
    * @param {{x:number,y:number}[]} [spec.patrol] punkty patrolu w world px
+   * @param {'light'|'heavy'|'armored'} [spec.armor] klasa pancerza → HP (CFG.ENEMY_HP)
    */
-  constructor({ id, x, y, type, facingRad = 0, patrol = [] }) {
-    super(x, y, 100);
+  constructor({ id, x, y, type, facingRad = 0, patrol = [], armor = 'light' }) {
+    super(x, y, CFG.ENEMY_HP[armor]);
     this.id = id;
     this.type = type;
+    this.armor = armor;
     this.speed = CFG.ENEMY_SPEED;
     this.direction = facingRad;
     this.patrol = patrol;

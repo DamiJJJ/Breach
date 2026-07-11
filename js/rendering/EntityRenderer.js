@@ -4,10 +4,13 @@ import { degToRad } from '../core/MathUtils.js';
 /**
  * Rysuje encje świata na warstwie #entities: stożki widzenia wrogów
  * (raycast po losMask — ucinane na ścianach, przechodzą przez okna),
- * wrogów i operatorów (kółko + trójkąt kierunku). Czyszczona i rysowana
- * co klatkę. Wrogowie niewidoczni dla drużyny (VisionSystem) są pomijani
- * w całości — mgła na #fog przyciemnia tylko teren, ukrywanie wrogów
- * dzieje się tutaj. Ścieżki rozkazów rysuje FogRenderer (nad mgłą).
+ * wrogów i operatorów (kółko + trójkąt kierunku), trupy pod żywymi,
+ * paski HP rannych i tracery strzałów (pula CombatSystemu). Czyszczona
+ * i rysowana co klatkę. Wrogowie niewidoczni dla drużyny (VisionSystem)
+ * są pomijani w całości — mgła na #fog przyciemnia tylko teren, ukrywanie
+ * wrogów dzieje się tutaj. Tracery rysowane są zawsze (także strzał
+ * z niewidocznego wroga — smuga zdradza ostrzał, to informacja dla gracza).
+ * Ścieżki rozkazów rysuje FogRenderer (nad mgłą).
  */
 export class EntityRenderer {
   /**
@@ -27,8 +30,9 @@ export class EntityRenderer {
    * @param {import('../entities/Enemy.js').Enemy[]} enemies
    * @param {Set<import('../entities/Enemy.js').Enemy>|null} visibleEnemies
    *   wrogowie widoczni dla drużyny (VisionSystem); null = rysuj wszystkich
+   * @param {import('../entities/Bullet.js').Bullet[]} [tracers] pula CombatSystemu
    */
-  draw(camera, dpr, operators, enemies = [], visibleEnemies = null) {
+  draw(camera, dpr, operators, enemies = [], visibleEnemies = null, tracers = []) {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -38,12 +42,20 @@ export class EntityRenderer {
     for (const enemy of enemies) {
       if (enemy.alive && enemyVisible(enemy)) this._drawVisionCone(ctx, enemy);
     }
+    // trupy pod żywymi
     for (const enemy of enemies) {
-      if (enemyVisible(enemy)) this._drawEnemy(ctx, enemy);
+      if (!enemy.alive && enemyVisible(enemy)) this._drawCorpse(ctx, enemy, CFG.ENEMY_RADIUS, '#5a2e2e', '#3c1f1f');
     }
     for (const op of operators) {
-      this._drawOperator(ctx, op);
+      if (!op.alive) this._drawCorpse(ctx, op, CFG.OPERATOR_RADIUS, '#31506e', '#22374d');
     }
+    for (const enemy of enemies) {
+      if (enemy.alive && enemyVisible(enemy)) this._drawEnemy(ctx, enemy);
+    }
+    for (const op of operators) {
+      if (op.alive) this._drawOperator(ctx, op);
+    }
+    this._drawTracers(ctx, tracers);
   }
 
   _drawVisionCone(ctx, enemy) {
@@ -78,6 +90,7 @@ export class EntityRenderer {
     ctx.stroke();
 
     this._drawDirectionTriangle(ctx, enemy, r, '#f7dcdc');
+    this._drawHpBar(ctx, enemy, r);
 
     if (enemy.state === 'ALERT') {
       ctx.fillStyle = '#ff5050';
@@ -109,6 +122,58 @@ export class EntityRenderer {
     ctx.stroke();
 
     this._drawDirectionTriangle(ctx, op, r, '#dce9f7');
+    this._drawHpBar(ctx, op, r);
+  }
+
+  /** Pasek HP pod encją — tylko gdy ranna (pełne zdrowie nie robi szumu). */
+  _drawHpBar(ctx, entity, r) {
+    if (entity.hp >= entity.maxHp) return;
+    const w = 22;
+    const h = 3;
+    const x = entity.x - w / 2;
+    const y = entity.y + r + 5;
+    const pct = entity.hp / entity.maxHp;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = pct > 0.5 ? '#6fbf5f' : pct > 0.25 ? '#d8b13c' : '#d85b3c';
+    ctx.fillRect(x, y, w * pct, h);
+  }
+
+  /** Trup: przygaszone kółko z krzyżykiem, bez trójkąta kierunku. */
+  _drawCorpse(ctx, entity, r, fill, stroke) {
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(entity.x, entity.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const d = r * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(entity.x - d, entity.y - d);
+    ctx.lineTo(entity.x + d, entity.y + d);
+    ctx.moveTo(entity.x + d, entity.y - d);
+    ctx.lineTo(entity.x - d, entity.y + d);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Smugi strzałów — jasne linie gasnące z ttl (pula, może być pusta). */
+  _drawTracers(ctx, tracers) {
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffd27a';
+    for (const t of tracers) {
+      if (!t.active) continue;
+      ctx.globalAlpha = Math.max(t.ttl / CFG.TRACER_TTL_S, 0) * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(t.x0, t.y0);
+      ctx.lineTo(t.x1, t.y1);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   _drawDirectionTriangle(ctx, entity, r, color) {

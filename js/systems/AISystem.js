@@ -73,6 +73,16 @@ export class AISystem {
       return;
     }
 
+    // Prowadzi ogień (cel z poprzedniej klatki — CombatSystem stoi w pętli
+    // za AI): stój i strzelaj zamiast biec dalej; lufę prowadzi Combat.
+    if (enemy.combatTarget && enemy.combatTarget.alive) {
+      if (enemy.path.length) {
+        enemy.setPath([]);
+        enemy.pathTarget = null;
+      }
+      return;
+    }
+
     const lk = enemy.lastKnown;
     const distToLk = Math.hypot(lk.x - enemy.x, lk.y - enemy.y);
     if (distToLk > this.map.tileSize * 0.75) {

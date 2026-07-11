@@ -70,6 +70,7 @@
       "x": 15,
       "y": 4,
       "type": "patrol",
+      "armor": "light",
       "patrol": [
         [
           15,
@@ -90,14 +91,16 @@
       "x": 20,
       "y": 12,
       "type": "stationary",
-      "facing": 180
+      "facing": 180,
+      "armor": "heavy"
     },
     {
       "id": "e3",
       "x": 3,
       "y": 16,
       "type": "stationary",
-      "facing": 90
+      "facing": 90,
+      "armor": "light"
     }
   ],
   "objectives": [

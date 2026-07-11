@@ -18,7 +18,7 @@ The authoritative spec is **[docs/DESIGN.md](docs/DESIGN.md)** (*BREACH – Game
 
 - **Run locally:** `python -m http.server 8000` in the project root, then open `http://localhost:8000`. ES modules + `fetch()` of maps do **not** work over `file://` — a static HTTP server is mandatory.
 
-- **Tests:** `test-smoke.html` is the whole harness (60 assertions, no test runner, no framework). It renders `ALL-PASS` or `FAILURES: <n>` into `<pre id="out">`. Serve, then run headless Chrome. This is a **Windows** box; both Chrome and Edge are installed. Run it from the Bash tool (the pipeline below is POSIX `sed`, not PowerShell):
+- **Tests:** `test-smoke.html` is the whole harness (77 assertions, no test runner, no framework). It renders `ALL-PASS` or `FAILURES: <n>` into `<pre id="out">`. Serve, then run headless Chrome. This is a **Windows** box; both Chrome and Edge are installed. Run it from the Bash tool (the pipeline below is POSIX `sed`, not PowerShell):
   ```bash
   python -m http.server 8000 &
   "/c/Program Files/Google/Chrome/Application/chrome.exe" \
@@ -90,7 +90,7 @@ AI (2) → Movement (3) → DoorSystem (4, = CommandSystem placeholder) → Dete
 
 This is deliberate: Detection runs **after** movement so perception uses this frame's positions, which means **AI consumes the detection result computed at the end of the previous frame** (a one-frame lag, contrary to the brief's "AI czyta wynik DetectionSystem z tej samej klatki"). DoorSystem sits before Detection so a door opened this frame is immediately visible to perception.
 
-**Consequence for Sprint 5:** `CombatSystem` must run **after** `DetectionSystem`, not at the brief's slot 5, or it will fire on stale LOS. Don't "fix" the order by moving Detection to the top without re-checking the door/movement interaction above.
+**Consequence (implemented in Sprint 5):** `CombatSystem` runs **after** `DetectionSystem` (`AI → Movement → DoorSystem → Detection → Combat → Camera`), not at the brief's slot 5, so it fires on this frame's LOS. Don't "fix" the order by moving Detection to the top without re-checking the door/movement interaction above. Corollary: `AISystem` reads `enemy.combatTarget` (set by CombatSystem) with the same one-frame lag — an enemy stops to shoot one frame after acquiring a target.
 
 ## External libraries (CDN only — do not vendor)
 
@@ -99,7 +99,7 @@ This is deliberate: Detection runs **after** movement so perception uses this fr
 
 ## Roadmap position
 
-Sprints 1–4 are complete. Next is **Sprint 5** (combat: hitscan, pooled tracers, HP, death, friendly fire). Sprint order lives in [README.md](README.md) and [docs/DESIGN.md](docs/DESIGN.md).
+Sprints 1–5 are complete. Next is **Sprint 6** (tactical pause + path orders: queueing in PLANNING). Sprint order lives in [README.md](README.md) and [docs/DESIGN.md](docs/DESIGN.md).
 
 **Sprint 1–2 — map, camera, operator, enemies.** Pathfinding via `MapData.findPathWorld`. [js/entities/Enemy.js](js/entities/Enemy.js), [js/systems/DetectionSystem.js](js/systems/DetectionSystem.js) (vision cone + LOS raycast over `losMask` via `MapData.castRay` / `hasLineOfSight`), [js/systems/AISystem.js](js/systems/AISystem.js) (PATROL / IDLE / ALERT with alert propagation).
 
@@ -111,6 +111,8 @@ Sprints 1–4 are complete. Next is **Sprint 5** (combat: hitscan, pooled tracer
 There is **no** "unexplored" state and **no** explored-memory canvas. Order paths are drawn **above** the fog (in `FogRenderer`, not `EntityRenderer`) so plans into dimmed rooms stay readable. Fog rays that hit a blocker are extended `FOG_REVEAL_PX` into the blocking tile so a wall/door you're looking at reads as seen, not dimmed (`VisionSystem._revealPoint`; the smoke tests assert the extended endpoints). Fog dims **terrain only** — hiding enemies is `EntityRenderer`'s job via the visible-enemies set.
 
 **Sprint 4 — doors.** [js/entities/Door.js](js/entities/Door.js) is data only (`closed` / `open` / `breached`). [js/systems/DoorSystem.js](js/systems/DoorSystem.js) is the **only** place allowed to change `door.state`: `setState` runs the brief's full door contract — `MapData.rebuildMasks()` (both masks + PF grid), then the `onDoorChanged` callback that `Game` wires to `MapRenderer.markDirty()`. Door orders live on the operator as data (`op.doorAction`); the operator paths to an approach tile, then DoorSystem executes `OPEN_SLOW` (quiet, `DOOR_OPEN_SLOW_S`) or `KICK` (instant + `DetectionSystem.raiseNoise`, alerting enemies within `KICK_ALERT_TILES` — pure radius, sound ignores walls). Input: right-click a closed door = quiet open, Ctrl+right-click = kick (nearest selected operator); a plain move order cancels a pending `doorAction`. `BREACH` waits for Sprint 7 (breach charge), but the `breached` state is already handled by masks and renderer.
+
+**Sprint 5 — combat (hitscan).** [js/systems/CombatSystem.js](js/systems/CombatSystem.js) — both sides auto-engage the nearest visible hostile (`DetectionSystem.canSee`: cone + range + `losMask`, so windows are shot through): sticky target, aim delay before the first shot (`OPERATOR_AIM_S` / `ENEMY_AIM_S` — the latter stands in for the brief's "ALERT: 1 s przed COMBAT", since the AI deliberately has no COMBAT/SEARCH states), then fire-rate cooldown; the shooter's `direction` tracks its target. A shot is hitscan along the canSee ray and the **first other entity on the ray takes the hit instead of the target** (friendly fire; segment–circle test in `_scanRay`). Damage/death in `_applyDamage`: a corpse loses path, target, selection and `doorAction`, and can't be selected or ordered (`InputHandler` skips dead). [js/entities/Bullet.js](js/entities/Bullet.js) is a **visual tracer only**, pre-allocated in `CombatSystem.tracers` (`TRACER_POOL`, oldest slot reused — no `new` per shot). Operator shots call `raiseNoise(SHOT_ALERT_TILES)` (through walls, like KICK); enemy shots deliberately don't (the noise would mark the enemy shooter's own position as the "target" for its allies). Enemy HP comes from the map's optional `armor` field (`light`/`heavy`/`armored` → `CFG.ENEMY_HP`, validated in `MapData`). An enemy with a live `combatTarget` stands still in `AISystem._alert` instead of advancing on `lastKnown`. `EntityRenderer` draws HP bars (wounded only), corpses, and tracers — tracers even for unseen shooters (the streak is the player's warning).
 
 ## Pre-flight checklist (run at the end of every sprint)
 

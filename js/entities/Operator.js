@@ -13,7 +13,7 @@ export class Operator extends Entity {
    * @param {number} id
    */
   constructor(x, y, id) {
-    super(x, y, 100);
+    super(x, y, CFG.OPERATOR_HP);
     this.id = id;
     this.speed = CFG.OPERATOR_SPEED;
     this.selected = false;
